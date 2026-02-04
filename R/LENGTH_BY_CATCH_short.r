@@ -110,8 +110,8 @@
 #' @return
 #' A list with two elements:
 #' \describe{
-#'   \item{[[1]]}{Annual length compositions for a single aggregated fishery.}
-#'   \item{[[2]]}{Annual length compositions split by gear.}
+#'   \item{aggregated}{Annual length compositions for a single aggregated fishery.}
+#'   \item{by_gear}{Annual length compositions split by gear.}
 #' }
 #'
 #' @references

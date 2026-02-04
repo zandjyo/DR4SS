@@ -27,8 +27,8 @@ build_fishery_catch_ss <- function(con,
                                    final_year,
                                    fsh_sp_label,
                                    fsh_sp_area,
-                                   one_fleet = FALSE,
-                                   old_seas_gear_catch = NULL,
+                                   one_fleet = TRUE,
+                                   old_seas_gear_catch = OLD_SEAS_GEAR_CATCH,
                                    catch_total = NULL,
                                    catch_se = 0.01,
                                    init_catch = 42500) {
@@ -73,9 +73,9 @@ build_fishery_catch_ss <- function(con,
   #sql_code <- sql_read("dom_catch.sql", root_dir = "int/sql")
 
   sql_code <- sql_reader("dom_catch.sql") 
-  sql_code <- sql_filter(sql_precode = "<=", x = final_year,  sql_code = sql_code, flag = "-- insert year")
-  sql_code <- sql_filter(sql_precode = "IN", x = fsh_sp_label, sql_code = sql_code, flag = "-- insert species_catch")
-  sql_code <- sql_filter(sql_precode = "IN", x = fsh_sp_area,  sql_code = sql_code, flag = "-- insert subarea")
+  sql_code <- sql_filter(sql_precode = "<=", x = as.numeric(as.character(final_year)),  sql_code = sql_code, flag = "-- insert year", value_type = c("numeric"))
+  sql_code <- sql_filter(sql_precode = "IN", x = fsh_sp_label, sql_code = sql_code, flag = "-- insert species_catch", value_type = c("character"))
+  sql_code <- sql_filter(sql_precode = "IN", x = fsh_sp_area,  sql_code = sql_code, flag = "-- insert subarea", value_type = c("character"))
 
   CATCH <- sql_run(con, sql_code) |>
     dplyr::rename_all(toupper) |>

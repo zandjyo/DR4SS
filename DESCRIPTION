@@ -1,7 +1,7 @@
 Package: DR4SS
 Title: Data Recovery for Stock Synthesis - North Pacific
 Version: 0.1.0
-Authors@R: 
+Authors@R:
     person("Steve", "Barbeaux", role = c("aut", "cre"),
            email = "steve.barbeaux@noaa.gov")
 Description: Tools for accessing AFSC and AKFIN databases and producing
@@ -11,52 +11,34 @@ Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.3
 Imports:
-  datasets, 
-  data.table,
-  devtools,
-  dplyr,
-  fishmethods, 
-  flextable,
-  forcats, 
-  FSA,
-  ggplot2,
-  gnm,  
-  graphics, 
-  grDevices, 
-  grid,
-  gt,
-  keyring,
-  lubridate, 
-  magrittr, 
-  methods,
-  misty,
-  mgcv, 
-  nlme, 
-  nlstools,
-  officer, 
-  pdftools,
-  pivottabler, 
-  purrr,
-  qgam,
-  r4ss,
-  readr,
-  readxl, 
-  remotes,
-  reshape2,
-  RODBC, 
-  scales,
-  sizeMat, 
-  sp,
-  ss3diags, 
-  stats,
-  stringr,
-  tibble, 
-  tidyr, 
-  tidyverse, 
-  usethis, 
-  utils,
-  vcd,
-  vcdExtra
-Suggests: 
+    data.table,
+    dplyr,
+    magrittr,
+    mgcv,
+    qgam,
+    stats,
+    utils,
+    methods,
+    graphics,
+    grDevices,
+    tidyr,
+    tibble,
+    stringr,
+    keyring,
+    RODBC,
+    lubridate,
+    purrr,
+    reshape2,
+    scales,
+    r4ss,
+    ss3diags,
+    sizeMat,
+    sp
+Suggests:
+    ggplot2,
+    readr,
+    readxl,
+    forcats,
     testthat (>= 3.0.0)
 Config/testthat/edition: 3
+

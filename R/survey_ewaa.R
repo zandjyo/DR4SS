@@ -22,7 +22,8 @@ survey_ewaa <- function(con,
                         species = 21720,
                         region  = "BS",
                         maxage  = 10,
-                        split_sex = FALSE) {
+                        split_sex = FALSE,
+                        year_min = 2007 ) {
 
   if (!requireNamespace("mgcv", quietly = TRUE)) {
     stop("Package 'mgcv' is required for GAM weight filling (add to Imports).", call. = FALSE)
@@ -41,6 +42,7 @@ survey_ewaa <- function(con,
 
   # --- run ---
   d <- data.table::as.data.table(sql_run(con, sql_code))
+  d <- d[Year >= year_min]
 
   # --- validate required columns (Sex only required if split_sex=TRUE) ---
   need <- c("Year", "Age_yrs", "Length_cm", "Weight_kg")

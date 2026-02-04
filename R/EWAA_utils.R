@@ -204,7 +204,7 @@ rich.colors.short <- function(n, alpha = 1) {
 #' @param agevec Vector of ages (default 0:10)
 #' @param yrvec Vector of years (default 1990:2022)
 #' @param mat Matrix of values by age (rows) and year (columns) **excluding**
-#'   the mean vector. See Details in [make_wtatage_plots()].
+#'   the mean vector. See Details in [make_wtatage_plots]
 #' @param meanvec Vector of mean values by age (across years).
 #' @param Ntext If TRUE, print sample sizes instead of values.
 #' @param Nsamp.mat Matrix of sample sizes aligned with `mat`.
@@ -576,9 +576,9 @@ write_wtatage_file <- function(
 
 #' Identify weight-at-age outliers
 #'
-#' Flags outliers using simple screening rules:
+#'  Flags outliers using simple screening rules:
 #'  * September 2003: fish < 0.01 kg and length > 130 cm,
-#'  * weight-length envelope: outside [2e-6*L^3, 20e-6*L^3],
+#'  * weight-length envelope: outside (2e-6*L^3, 20e-6*L^3),
 #'  * ages >= 20 (often coded ages like 99/99+ or miscoded).
 #'
 #' @param data A long-format EWAA data frame.
