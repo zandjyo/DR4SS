@@ -18,6 +18,7 @@
     gap_products.akfin_haul.performance,
     gap_products.akfin_specimen.specimen_sample_type,
     gap_products.akfin_specimen.specimen_id,
+    gap_products.akfin_cruise.survey_definition_id,
     gap_products.akfin_cruise.survey_name
 FROM
          gap_products.akfin_cruise

@@ -73,16 +73,17 @@ get_lengthweight <- function(con_akfin,
   area <- toupper(area)
   location <- switch(
     area,
-    "BS"  = "between 500 and 539",
-    "AI"  = "between 540 and 543",
-    "GOA" = "between 600 and 700",
-    stop("Invalid `area`. Use one of: BS, AI, GOA.", call. = FALSE)
+    "BS"  = c(500:539),
+    "AI"  = c(540:544),
+    "GOA" = c(600:699),
+    "BSWGOA" = c(500:539,610,620),
+    stop("Invalid `area`. Use one of: BS, AI, GOA, BSWGOA.", call. = FALSE)
   )
 
   # ---- Domestic data ----
   dwt <- sql_reader("dom_age_wt.sql")
   dwt <- sql_filter("IN", species, dwt, flag = "-- insert species", value_type = "numeric")
-  dwt <- sql_add(location, dwt, flag = "-- insert location")
+  dwt <- sql_filter("IN",location, dwt, flag = "-- insert location", value_type = "numeric")
 
   data_dom <- sql_run(con_akfin, dwt) |>
     data.table::as.data.table() |>
@@ -97,8 +98,8 @@ get_lengthweight <- function(con_akfin,
   if (!is.null(con_afsc)) {
     fwt <- sql_reader("for_age_wt.sql")
     fwt <- sql_filter("IN", species, fwt, flag = "-- insert species", value_type = "numeric")
-    fwt <- sql_add(location, fwt, flag = "-- insert location")
-
+    fwt <- sql_filter("IN",location, fwt, flag = "-- insert location", value_type = "numeric")
+    
     data_for <- sql_run(con_afsc, fwt) |>
       data.table::as.data.table() |>
       dplyr::rename_with(toupper)
@@ -140,8 +141,8 @@ get_lengthweight <- function(con_akfin,
   # ---- GAM ----
   gam_fit <- mgcv::gam(
     logW ~ YEAR1 * logL +
-      mgcv::s(WEEK1, by = logL, bs = "cc", k = K) +
-      mgcv::s(WEEK1, bs = "cc", k = K),
+      s(WEEK1, by = logL, bs = "cc", k = K) +
+      s(WEEK1, bs = "cc", k = K),
     data = data_LW
   )
 

@@ -29,7 +29,7 @@
 #' @export
 GET_SURVEY_LCOMP <- function(con_akfin,
                              species = 21720,
-                             bins = seq(3.5, 119.5, 1),
+                             bins = seq(4.5, 119.5, 5),
                              bin = TRUE,
                              area = "BS",
                              sex = 1,
@@ -59,7 +59,7 @@ GET_SURVEY_LCOMP <- function(con_akfin,
   }
 
   # ---- haul/sample counts (Nsamp) ----
-  Count_sql <- sql_reader("count_AKFIN.sql")
+  Count_sql <- sql_reader("AKFIN_count.sql")
   Count_sql <- sql_filter("IN", species, Count_sql,
                           flag = "-- insert species",
                           value_type = "numeric")
@@ -71,7 +71,7 @@ GET_SURVEY_LCOMP <- function(con_akfin,
     data.table::as.data.table() |>
     dplyr::rename_with(toupper)
 
-  if (!all(c("YEAR", "HAULS") %in% names(Count))) {
+  if (!all(c("YEAR", "HAULS","LENGTHS") %in% names(Count))) {
     stop("count_AKFIN.sql must return columns YEAR and HAULS.", call. = FALSE)
   }
 

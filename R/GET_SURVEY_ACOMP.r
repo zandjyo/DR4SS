@@ -106,7 +106,7 @@ GET_SURVEY_ACOMP <- function(con_akfin = NULL,
   }
 
   # ---- Nsamp (haul/sample counts) from AKFIN ----
-  Count_sql <- sql_reader("count_AKFIN.sql")
+  Count_sql <- sql_reader("AKFIN_count.sql")
   Count_sql <- sql_filter("IN", species, Count_sql, flag = "-- insert species", value_type = "numeric")
   Count_sql <- sql_filter("IN", area_map$survey, Count_sql, flag = "-- insert survey", value_type = "numeric")
 
@@ -159,14 +159,13 @@ GET_SURVEY_ACOMP <- function(con_akfin = NULL,
     Acomp <- merge(grid, Acomp, all.x = TRUE)
     Acomp$AGEPOP[is.na(Acomp$AGEPOP)] <- 0
     data.table::setorder(Acomp, YEAR, AGE)
-
-  } else {
+    } else {
 
     Proportions <- data.table::as.data.table(vast_agecomp)
 
     # legacy filter
     if (all(c("Region", "Year") %in% names(Proportions))) {
-      Proportions <- Proportions[Region == "Both" & Year != 2020]
+      Proportions <- Proportions[Region == "both" & Year != 2020]
     } else {
       stop("vast_agecomp must include columns Region and Year (legacy expectation).", call. = FALSE)
     }
@@ -235,6 +234,8 @@ GET_SURVEY_ACOMP <- function(con_akfin = NULL,
   for (i in seq_along(years)) {
     SS_out[i, 10:FIN] <- Acomp$AGEPOP[Acomp$YEAR == years[i]]
   }
+
+SS_out[,(10:ncol(SS_out))] <- SS_out[,(10:ncol(SS_out))]/rowSums(SS_out[,(10:ncol(SS_out))])
 
   SS_out
 }

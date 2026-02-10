@@ -39,10 +39,10 @@ build_ll_cpue <- function(con=conn$akfin,
   # ---- read and filter SQL ----
   sql_code <- sql_reader("LL_RPN.sql")
 
-  sql_code <- sql_filter(sql_precode = "<=", x = ly,           sql_code = sql_code, flag = "-- insert year")
-  sql_code <- sql_filter(sql_precode = "IN", x = srv_sp_str,   sql_code = sql_code, flag = "-- insert species")
-  sql_code <- sql_filter(sql_precode = "IN", x = sp_area,      sql_code = sql_code, flag = "-- insert area")
-  sql_code <- sql_filter(sql_precode = "IN", x = LL_sp_region, sql_code = sql_code, flag = "-- insert region")
+  sql_code <- sql_filter(sql_precode = "<=", x = ly,           sql_code = sql_code, flag = "-- insert year", value_type = c("numeric"))
+  sql_code <- sql_filter(sql_precode = "IN", x = srv_sp_str,   sql_code = sql_code, flag = "-- insert species", value_type = c("numeric"))
+  sql_code <- sql_filter(sql_precode = "IN", x = sp_area,      sql_code = sql_code, flag = "-- insert area", value_type = c("character"))
+  sql_code <- sql_filter(sql_precode = "IN", x = LL_sp_region, sql_code = sql_code, flag = "-- insert region",value_type = c("character"))
 
   # ---- run query ----
   LL_RPN <- sql_run(con, sql_code) %>%

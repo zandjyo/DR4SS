@@ -7,37 +7,59 @@
 SBSS_GET_ALL_DATA(
   con_akfin = conn$akfin,
   con_afsc = conn$afsc,
-  ly = 2025,
-  area = "BS",
-  sp_area = "BSAI",
   srv_sp_str = 21720,
   fsh_species = 202,
   fsh_sp_label = "PCOD",
+  fsh_species_catch = "PACIFIC COD",
+  ly = 2025,
+  area = "BS",
+  sp_area = "BSAI",
   fsh_sp_area = "BS",
-  one_fleet = FALSE,
+  LL_sp_region = "Bering Sea",
+  srv_start_yr = 1977,
+  do_LL = FALSE,
+  LLsrv_start_yr = 1990,
+  srv_flt = 2,
+  LL_fleet = 3,
+  LL_seas = 7,
+  srv_seas = 7,
+  use_vast = TRUE,
+  VAST_abundance = VAST_abundance,
+  len_bins = seq(4.5, 119.5, 5),
+  max_age = 12,
+  srv_biom = FALSE,
+  vast_agecomp = VAST_AGECOMP,
+  one_fleet = TRUE,
   catch_se = 0.01,
   init_catch = 42500,
-  do_LL = FALSE,
-  LL_fleet = 3,
-  LL_sp_region = "Bering Sea",
-  LLsrv_start_yr = 1990,
-  LL_seas = 7,
-  srv_start_yr = 1977,
-  len_bins = seq(4.5, 119.5, 5),
-  max_age = 10,
+  old_catch = OLD_SEAS_GEAR_CATCH,
   do_fsh_ewaa = TRUE,
-  fsh_ewaa_split_sex = FALSE,
+  ewaa_split_sex = FALSE,
+  ewaa_ymin = 2007,
+  standard_quarter = FALSE,
+  target_qtr = 2L,
   do_fsh_lcomp = TRUE,
   fsh_lcomp_sex = TRUE,
   fsh_lcomp_port = TRUE,
-  fsh_species_catch = fsh_sp_label,
-  for_species_catch = NULL
+  use_foriegn = TRUE,
+  for_species_catch = NULL,
+  do_fsh_CLAA = TRUE,
+  do_srv_CLAA = TRUE,
+  env_LW = FALSE
 )
 }
 \arguments{
 \item{con_akfin}{DBI connection to AKFIN (required).}
 
 \item{con_afsc}{DBI connection to AFSC (required for some survey/fishery helpers).}
+
+\item{srv_sp_str}{Survey species code (AKFIN survey code; e.g. 21720 for EBS PCOD).}
+
+\item{fsh_species}{Fishery species code used by fishery EWAA and fishery SQL (e.g. 202).}
+
+\item{fsh_sp_label}{Fishery species label used by fishery catch SQL filter (as used in your SQL).}
+
+\item{fsh_species_catch}{Species code used by fishery catch/length SQL (can differ from survey).}
 
 \item{ly}{Last year to include (final assessment year / last fishery year).}
 
@@ -46,37 +68,28 @@ SBSS_GET_ALL_DATA(
 \item{sp_area}{Fishery “area” selector passed into fishery length-by-catch and LL CPUE
 SQL filters (your existing conventions; e.g. "BSAI" or "BS-NBS" depending on function).}
 
-\item{srv_sp_str}{Survey species code (AKFIN survey code; e.g. 21720 for EBS PCOD).}
-
-\item{fsh_species}{Fishery species code used by fishery EWAA and fishery SQL (e.g. 202).}
-
-\item{fsh_sp_label}{Fishery species label used by fishery catch SQL filter (as used in your SQL).}
-
 \item{fsh_sp_area}{Fishery subarea filter injected into dom_catch.sql (vector).}
-
-\item{one_fleet}{Logical; if TRUE, aggregate fishery catch gears into fleet 1 in
-\code{\link[=build_fishery_catch_ss]{build_fishery_catch_ss()}}.}
-
-\item{do_LL}{Logical; if TRUE include longline survey RPN CPUE via \code{\link[=build_ll_cpue]{build_ll_cpue()}}.}
-
-\item{LL_fleet}{Integer SS fleet number for the LL CPUE index (e.g. 3 or 5).}
 
 \item{LL_sp_region}{Region filter injected into LL_RPN.sql (your existing convention).}
 
+\item{srv_start_yr}{Start year for survey biomass/comps pulls.}
+
+\item{do_LL}{Logical; if TRUE include longline survey RPN CPUE via \code{\link[=build_ll_cpue]{build_ll_cpue()}}.}
+
 \item{LLsrv_start_yr}{First year to include in LL CPUE output.}
 
-\item{LL_seas}{Season number for LL CPUE (default 7).}
+\item{LL_fleet}{Integer SS fleet number for the LL CPUE index (e.g. 3 or 5).}
 
-\item{srv_start_yr}{Start year for survey biomass/comps pulls.}
+\item{LL_seas}{Season number for LL CPUE (default 7).}
 
 \item{len_bins}{Length bins for survey length comps.}
 
 \item{max_age}{Plus-group age for age comps and fishery EWAA outputs.}
 
-\item{do_fsh_ewaa}{Logical; if TRUE run \code{\link[=fishery_ewaa]{fishery_ewaa()}}.}
+\item{one_fleet}{Logical; if TRUE, aggregate fishery catch gears into fleet 1 in
+\code{\link[=build_fishery_catch_ss]{build_fishery_catch_ss()}}.}
 
-\item{fsh_ewaa_split_sex}{Logical; if TRUE, fishery EWAA fits/predicts split by sex and
-outputs F/M tables.}
+\item{do_fsh_ewaa}{Logical; if TRUE run \code{\link[=fishery_ewaa]{fishery_ewaa()}}.}
 
 \item{do_fsh_lcomp}{Logical; if TRUE run \code{\link[=LENGTH_BY_CATCH_short]{LENGTH_BY_CATCH_short()}}.}
 
@@ -84,9 +97,10 @@ outputs F/M tables.}
 
 \item{fsh_lcomp_port}{Logical; passed to LENGTH_BY_CATCH_short(PORT=...).}
 
-\item{fsh_species_catch}{Species code used by fishery catch/length SQL (can differ from survey).}
-
 \item{for_species_catch}{Optional “foreign catch species” code used by LENGTH_BY_CATCH_short.}
+
+\item{fsh_ewaa_split_sex}{Logical; if TRUE, fishery EWAA fits/predicts split by sex and
+outputs F/M tables.}
 }
 \value{
 Named list of SS inputs (and intermediate objects) suitable for writing into a

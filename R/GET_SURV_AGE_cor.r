@@ -51,12 +51,13 @@ GET_SURV_AGE_cor <- function(con_akfin,
   survey <- switch(
     area,
     "GOA"   = 47,
-    "BS"    = 98,
+    "BS"    = c(98,143),
     "NBS"   = 143,
-    "BS-NBS" = c(98,143),
+    "BS-NBS" = c(98),
     "AI"    = 52,
     "SLOPE" = 78,
-    stop("Not a valid `area`. Use GOA, BS, NBS, BS-NBS, AI, or SLOPE.", call. = FALSE)
+    "BS-WGOA" = c(47,98,143),
+    stop("Not a valid `area`. Use GOA, BS, NBS, BS-NBS, AI, BS-WGOA, or SLOPE.", call. = FALSE)
   )
 
   # ---- query using packaged SQL template ----
@@ -71,6 +72,8 @@ GET_SURV_AGE_cor <- function(con_akfin,
 
   Age <- sql_run(con_akfin, sql) |>
     data.table::as.data.table()
+  
+  if(area=='BS-WGOA') { Age[longitude_dd_end <= -158 | longitude_dd_end > 0]}
 
   # Standardize column names to uppercase for consistency
   data.table::setnames(Age, toupper(names(Age)))

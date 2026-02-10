@@ -106,6 +106,7 @@
 #' @param ly Final year to include.
 #' @param SEX Logical; if \code{TRUE}, length compositions are sex-specific.
 #' @param PORT Logical; if \code{TRUE}, port sampling data are included.
+#' @param use_foreign Logical; if \code{TRUE}, foreign fishery data are included.
 #'
 #' @return
 #' A list with two elements:
@@ -127,7 +128,8 @@ LENGTH_BY_CATCH_short <- function(con_akfin,
                                   sp_area,
                                   ly,
                                   SEX = TRUE,
-                                  PORT = TRUE) {
+                                  PORT = TRUE,
+                                  use_foreign = TRUE) {
 
   # ---- package/import checks (lightweight) ----
   for (pkg in c("data.table", "dplyr", "lubridate")) {
@@ -151,10 +153,11 @@ LENGTH_BY_CATCH_short <- function(con_akfin,
 
   region <- switch(
     sp_area,
-    "AI"  = "BETWEEN 539 and 544",
-    "GOA" = "BETWEEN 600 and 699",
-    "BS"  = "BETWEEN 500 and 539",
-    stop("Invalid `sp_area` (use BS, AI, GOA).", call. = FALSE)
+    "AI"  = c(540:544),
+    "GOA" = c(600:699),
+    "BS"  = c(500:539),
+    "BSWGOA" =c(500:539,610,620),
+    stop("Invalid `sp_area` (use BS, AI, GOA, BSWGOA).", call. = FALSE)
   )
 
   # --------------------------
@@ -189,8 +192,9 @@ LENGTH_BY_CATCH_short <- function(con_akfin,
 
   # ---- Pull domestic length/species-comp (AKFIN) ----
   lfreq <- sql_reader("dom_length.sql")
-  lfreq <- sql_filter(sql_precode = "IN", x = species, sql_code = lfreq, flag = "-- insert species")
-  lfreq <- sql_add(x = region, sql_code = lfreq, flag = "-- insert region")
+  lfreq <- sql_filter(sql_precode = "IN", x = species, sql_code = lfreq, flag = "-- insert species",value_type = c("numeric"))
+  lfreq <- sql_filter(sql_precode = "IN", x = species, sql_code = lfreq, flag = "-- insert spec",value_type = c("numeric"))
+  lfreq <- sql_filter(sql_precode ="IN", x = region, sql_code = lfreq, flag = "-- insert region",value_type = c("numeric"))
 
   Dspcomp <- sql_run(con_akfin, lfreq) |>
     data.table::as.data.table()
@@ -199,10 +203,11 @@ LENGTH_BY_CATCH_short <- function(con_akfin,
   Dspcomp[, QUARTER := floor((as.numeric(MONTH) / 3) - 0.3) + 1]
 
   # ---- Pull foreign length/species-comp (AFSC) ----
+  if(use_foreign){
   Flfreq <- sql_reader("for_length.sql")
 
-  Flfreq <- sql_filter(sql_precode = "IN", x = species, sql_code = Flfreq, flag = "-- insert species")
-  Flfreq <- sql_add(x = region, sql_code = Flfreq, flag = "-- insert region")
+  Flfreq <- sql_filter(sql_precode = "IN", x = species, sql_code = Flfreq, flag = "-- insert species",value_type = c("numeric"))
+  Flfreq <- sql_filter(sql_precode ="IN", x = region, sql_code = Flfreq, flag = "-- insert region",value_type = c("numeric"))
 
   Fspcomp <- sql_run(con_afsc, Flfreq) |>
     data.table::as.data.table()
@@ -212,6 +217,8 @@ LENGTH_BY_CATCH_short <- function(con_akfin,
 
   # ---- Combine observer sources ----
   Tspcomp <- data.table::rbindlist(list(Fspcomp, Dspcomp), use.names = TRUE, fill = TRUE)
+  } else Tspcomp <- Dspcomp
+
   Tspcomp[, WED := WED(HDAY)]
   Tspcomp[, MONTH_WED := lubridate::month(WED)]
   Tspcomp[, MONTH := as.numeric(MONTH)]
@@ -256,8 +263,9 @@ LENGTH_BY_CATCH_short <- function(con_akfin,
 
     # ---- A: 1990–1998 ----
     PAlfreq <- sql_reader("dom_length_port_A.sql")
-    PAlfreq <- sql_filter("IN", species, PAlfreq, flag = "-- insert species")
-    PAlfreq <- sql_add(region, PAlfreq, flag = "-- insert region")
+    PAlfreq <- sql_filter(sql_precode = "IN", x=species, sql_code = PAlfreq, flag = "-- insert species",value_type = c("numeric"))
+    PAlfreq <- sql_filter(sql_precode = "IN", x=species, sql_code = PAlfreq, flag = "-- insert spec",value_type = c("numeric"))
+    PAlfreq <- sql_filter(sql_precode ="IN", x = region, sql_code = PAlfreq, flag = "-- insert region",value_type = c("numeric"))
 
     PADspcomp <- sql_run(con_afsc, PAlfreq) |>
       data.table::as.data.table()
@@ -279,15 +287,15 @@ LENGTH_BY_CATCH_short <- function(con_akfin,
 
     # ---- B: 1999–2007 ----
     PBlfreq <- sql_reader("dom_length_port_B.sql")
-    PBlfreq <- sql_filter("IN", species, PBlfreq, flag = "-- insert species")
-    PBlfreq <- sql_add(region, PBlfreq, flag = "-- insert region")
+    PBlfreq <- sql_filter("IN", species, PBlfreq, flag = "-- insert species",value_type = c("numeric"))
+    PBlfreq <- sql_filter(sql_precode ="IN", x = region, sql_code = PBlfreq, flag = "-- insert region",value_type = c("numeric"))
 
     PBLFREQ <- sql_run(con_afsc, PBlfreq) |>
       data.table::as.data.table()
     data.table::setnames(PBLFREQ, toupper(names(PBLFREQ)))
 
     PBftckt <- sql_reader("fish_ticket.sql")
-    PBftckt <- sql_filter("IN", species_catch, PBftckt, flag = "-- insert species")
+    PBftckt <- sql_filter("IN", species_catch, PBftckt, flag = "-- insert species", value_type = c("character"))
     PBFTCKT <- sql_run(con_akfin, PBftckt) |>
       data.table::as.data.table()
     data.table::setnames(PBFTCKT, toupper(names(PBFTCKT)))
@@ -353,9 +361,9 @@ LENGTH_BY_CATCH_short <- function(con_akfin,
 
      # ---- C: 2011–present ----
     PClfreq <- sql_reader("dom_length_port_C.sql")
-    PClfreq <- sql_filter("IN", species, PClfreq, flag = "-- insert species")
-    PClfreq <- sql_filter("IN", species_catch, PClfreq, flag = "-- insert catch_species")
-    PClfreq <- sql_add(region, PClfreq, flag = "-- insert region")
+    PClfreq <- sql_filter("IN", species, PClfreq, flag = "-- insert species",value_type = c("numeric"))
+    PClfreq <- sql_filter("IN", species_catch, PClfreq, flag = "-- insert catch_species",value_type = c("character"))
+    PClfreq <- sql_filter(sql_precode ="IN", x = region, sql_code = PClfreq, flag = "-- insert region",value_type = c("numeric"))
 
     PCDspcomp <- sql_run(con_afsc, PClfreq) |>
       data.table::as.data.table()
@@ -381,9 +389,9 @@ LENGTH_BY_CATCH_short <- function(con_akfin,
 
     # ---- D: 2008–2010 ----
     PDlfreq <- sql_reader("dom_length_port_D.sql")
-    PDlfreq <- sql_filter("IN", species, PDlfreq, flag = "-- insert species")
-    PDlfreq <- sql_add(region, PDlfreq, flag = "-- insert region")
-
+    PDlfreq <- sql_filter("IN", species, PDlfreq, flag = "-- insert species",value_type = c("numeric"))
+    PDlfreq <- sql_filter(sql_precode ="IN", x = region, sql_code = PDlfreq, flag = "-- insert region",value_type = c("numeric"))
+    
     PDLFREQ <- sql_run(con_afsc, PDlfreq) |>
       data.table::as.data.table()
     data.table::setnames(PDLFREQ, toupper(names(PDLFREQ)))
@@ -430,21 +438,21 @@ LENGTH_BY_CATCH_short <- function(con_akfin,
 
   # ---- blend domestic catch (AKFIN) ----
   catch <- sql_reader("dom_catch.sql")
-  catch <- sql_filter("<=", ly, catch, flag = "-- insert year")
-  catch <- sql_filter("IN", species_catch, catch, flag = "-- insert species_catch")
-  catch <- sql_filter("IN", sp_area, catch, flag = "-- insert subarea")
+  catch <- sql_filter("<=", ly, catch, flag = "-- insert year",value_type = c("numeric"))
+  catch <- sql_filter("IN", species_catch, catch, flag = "-- insert species_catch",value_type = c("character"))
+  catch <- sql_filter("IN", sp_area, catch, flag = "-- insert subarea",value_type = c("character"))
 
   CATCH <- sql_run(con_akfin, catch) |>
     data.table::as.data.table()
   data.table::setnames(CATCH, toupper(names(CATCH)))
-
+ if(use_foreign){
   # ---- foreign historical catch (AFSC) ----
   foreign_catch_area <- if (sp_area == "BS") "LIKE '%BERING%'" else
     if (sp_area == "AI") "LIKE '%ALEUTIANS%'" else
       "IN ('KODIAK','YAKUTAT', 'SHUMAGIN','S.E. ALASKA', 'SHELIKOF STR.','CHIRIKOF')"
 
   fcatch <- sql_reader("for_catch.sql")
-  fcatch <- sql_filter("IN", for_species_catch, fcatch, flag = "-- insert species_catch")
+  fcatch <- sql_filter("IN", for_species_catch, fcatch, flag = "-- insert species_catch",value_type = c("character"))
   fcatch <- sql_add(foreign_catch_area, fcatch, flag = "-- insert subarea")
 
   FCATCH <- sql_run(con_afsc, fcatch) |>
@@ -455,6 +463,8 @@ LENGTH_BY_CATCH_short <- function(con_akfin,
 
   # ---- combine catch sources ----
   CATCHT <- data.table::rbindlist(list(FCATCH, CATCH), use.names = TRUE, fill = TRUE)
+  } else CATCHT<-CATCH
+
   CATCHT <- CATCHT[TONS > 0]
   CATCHT[, AREA := as.numeric(AREA)]
   CATCHT[, MONTH := as.numeric(MONTH_WED)]
@@ -531,6 +541,9 @@ LENGTH_BY_CATCH_short <- function(con_akfin,
     L_Y <- Length[, .(Y_STONS = sum(YAGMH_STONS), Y_SNUM = sum(YAGMH_SNUM), Y_SFREQ = sum(SUM_FREQUENCY)),
                   by = .(YEAR)]
     Length <- merge(Length, L_Y, by = "YEAR", all.x = TRUE)
+
+    Length$SPECIES<-as.numeric(Length$SPECIES)
+    CATCHT4$SPECIES<-as.numeric(CATCHT4$SPECIES)
 
     x <- merge(Length, CATCHT4, by = c("SPECIES", "YEAR", "AREA2", "GEAR", "MONTH"), all.x = TRUE)
     y2 <- x[!is.na(YAGM_TNUM)]
@@ -644,6 +657,9 @@ LENGTH_BY_CATCH_short <- function(con_akfin,
   L_Y <- Length[, .(Y_STONS = sum(YAGMH_STONS), Y_SNUM = sum(YAGMH_SNUM), Y_SFREQ = sum(SUM_FREQUENCY)),
                 by = .(YEAR)]
   Length <- merge(Length, L_Y, by = "YEAR", all.x = TRUE)
+
+  Length$SPECIES<-as.numeric(Length$SPECIES)
+  CATCHT4$SPECIES<-as.numeric(CATCHT4$SPECIES)
 
   x <- merge(Length, CATCHT4, by = c("SPECIES", "YEAR", "AREA2", "GEAR", "MONTH"), all.x = TRUE)
   y2 <- x[!is.na(YAGM_TNUM)]

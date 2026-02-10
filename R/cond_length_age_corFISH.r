@@ -1,200 +1,193 @@
+#' Conditional age-at-length compositions for fishery data (catch/age table)
+#'
+#' @description
+#' Pulls domestic fishery age/length records via SQL, bins lengths, plus-groups ages,
+#' and returns Stock Synthesis age-composition observations in conditional age-at-length form
+#' (rows are Year x Length-bin; cells are age proportions). Sample sizes are weighted by `wt`.
+#'
+#' @param con DBI connection for AKFIN.
+#' @param species Numeric species code(s) used in the SQL filter (e.g., fishery species code).
+#' @param area Character region selector: one of \code{"AI"}, \code{"BS"}, \code{"GOA"}.
+#' @param max_age1 Maximum age (plus group).
+#' @param len_bins1 Numeric vector of length bin lower edges (SS bins). The final bin is treated as plus.
+#' @param one_fleet Logical. If TRUE, all fishery data are assigned to fleet 1. If FALSE, HAL=2, POT=3, TRW/other=1.
+#' @param wt Numeric multiplier applied to Nsamp (column 9).
+#' @param seas Integer season for SS output (default 1 for fishery conditional age-at-length tables).
+#' @param ageerr Integer age-error definition index for SS output (default 1).
+#'
+#' @return A list with element \code{$norm}, a data.frame in SS agecomp format with columns:
+#' \code{Yr, Seas, Flt, Gender, Part, Ageerr, Lbin_lo, Lbin_hi, Nsamp, a0..aMax}.
+#'
+#' @export
+cond_length_age_corFISH <- function(con,
+                                    species,
+                                    area,
+                                    max_age1,
+                                    len_bins1,
+                                    one_fleet = TRUE,
+                                    wt = 1,
+                                    seas = 1,
+                                    ageerr = 1) {
 
-cond_length_age_corFISH<-function(species = fsh_sp_str,
-                                  area = fsh_sp_area,
-                                  max_age1 = max_age,
-                                  len_bins1 = len_bins,
-                                  one_fleet = TRUE,
-                                  wt = 1){
+  if (!requireNamespace("data.table", quietly = TRUE)) {
+    stop("Package 'data.table' is required.", call. = FALSE)
+  }
+  if (!requireNamespace("dplyr", quietly = TRUE)) {
+    stop("Package 'dplyr' is required.", call. = FALSE)
+  }
 
+  # ---- validate inputs ----
+  area <- toupper(as.character(area))
+  if (!area %in% c("AI", "BS", "GOA", "BSWGOA")) {
+    stop("`area` must be one of 'AI', 'BS', 'GOA' or 'BSWGOA'.", call. = FALSE)
+  }
+  if (!is.numeric(len_bins1) || length(len_bins1) < 2) {
+    stop("`len_bins1` must be a numeric vector of length bins (length >= 2).", call. = FALSE)
+  }
+  len_bins1 <- sort(unique(len_bins1))
 
- if(area=='AI')
-    {
-        region<-"539 and 544"
+  # ---- map region clause for SQL ----
+  region_clause <- switch(
+    area,
+    AI  = c(540:544),
+    BS  = c(500:539),
+    GOA = c(600:699),
+    BSWGOA = c(500:539,610,620)
+  )
+
+  # ---- pull data ----
+  sql_code <- sql_reader("dom_age.sql")
+  sql_code <- sql_filter(sql_precode="IN",x= region_clause, sql_code = sql_code, flag = "-- insert region")
+  sql_code <- sql_filter(sql_precode = "IN", x = species, sql_code = sql_code, flag = "-- insert species")
+
+  dt <- sql_run(con, sql_code) %>%
+    data.table::as.data.table() %>%
+    dplyr::rename_all(toupper) %>%
+    data.table::as.data.table()
+
+  if (nrow(dt) == 0L) {
+    # return empty SS-format table with correct columns
+    age_cols <- paste0("a", 0:max_age1)
+    out <- data.frame(
+      Yr = integer(0), Seas = integer(0), Flt = integer(0),
+      Gender = integer(0), Part = integer(0), Ageerr = integer(0),
+      Lbin_lo = numeric(0), Lbin_hi = numeric(0), Nsamp = numeric(0),
+      stringsAsFactors = FALSE
+    )
+    out[age_cols] <- numeric(0)
+    return(list(norm = out))
+  }
+
+  # ---- harmonize / clean ----
+  # plus-group age
+  dt[, AGE_FILT := pmin(AGE, max_age1)]
+
+  # remove missing/non-positive age/length as in original
+  dt <- dt[!is.na(AGE) & !is.na(LENGTH) & LENGTH > 0 & AGE > 0]
+
+  if (nrow(dt) == 0L) {
+    age_cols <- paste0("a", 0:max_age1)
+    out <- data.frame(
+      Yr = integer(0), Seas = integer(0), Flt = integer(0),
+      Gender = integer(0), Part = integer(0), Ageerr = integer(0),
+      Lbin_lo = numeric(0), Lbin_hi = numeric(0), Nsamp = numeric(0),
+      stringsAsFactors = FALSE
+    )
+    out[age_cols] <- numeric(0)
+    return(list(norm = out))
+  }
+
+  # HAULJOIN logic (keep your rule: if HAUL_JOIN == "H" then PORT_JOIN else HAUL_JOIN)
+  dt[, HAULJOIN := HAUL_JOIN]
+  dt[HAUL_JOIN == "H", HAULJOIN := PORT_JOIN]
+
+  # fleet mapping
+  if (isTRUE(one_fleet)) {
+    dt[, GEAR2 := 1L]
+  } else {
+    dt[, GEAR2 := 1L]
+    dt[GEAR == "HAL", GEAR2 := 2L]
+    dt[GEAR == "POT", GEAR2 := 3L]
+  }
+
+  # length binning (fast)
+  # - treat last bin as plus bin (everything >= last threshold maps to last bin)
+  # - for values below first bin, assign first bin
+  idx <- findInterval(dt$LENGTH, vec = len_bins1, rightmost.closed = TRUE, all.inside = FALSE)
+  idx[idx < 1L] <- 1L
+  idx[idx > length(len_bins1)] <- length(len_bins1)
+  dt[, BIN := len_bins1[idx]]
+
+  # ---- build SS conditional age-at-length compositions by fleet ----
+  fleets <- sort(unique(dt$GEAR2))
+  age_levels <- 0:max_age1
+  age_cols <- paste0("a", age_levels)
+
+  out_list <- vector("list", length(fleets))
+
+  for (k in seq_along(fleets)) {
+    flt <- fleets[k]
+    dtk <- dt[GEAR2 == flt]
+
+    if (nrow(dtk) == 0L) next
+
+    # counts by Year x BIN x AGE_FILT
+    cnt <- dtk[, .N, by = .(YEAR, BIN, AGE_FILT)]
+
+    # Nsamp by Year x BIN
+    ns <- cnt[, .(Nsamp = sum(N)), by = .(YEAR, BIN)]
+
+    # wide age counts by Year x BIN
+    wide <- data.table::dcast(
+      cnt,
+      YEAR + BIN ~ AGE_FILT,
+      value.var = "N",
+      fill = 0
+    )
+
+    # ensure all age columns exist (0..max_age1)
+    missing_ages <- setdiff(as.character(age_levels), names(wide))
+    for (ma in missing_ages) wide[, (ma) := 0]
+
+    # reorder age columns
+    data.table::setcolorder(wide, c("YEAR", "BIN", as.character(age_levels)))
+
+    # convert to proportions
+    wide <- merge(wide, ns, by = c("YEAR", "BIN"), all.x = TRUE)
+    for (a in as.character(age_levels)) {
+      wide[, (a) := data.table::fifelse(Nsamp > 0, get(a) / Nsamp, 0)]
     }
-    if(area=='GOA')
-    {
-        region<-"600 and 699 AND OBSINT.DEBRIEFED_AGE.NMFS_AREA != 670"
-    }
-    if(area=='BS')
-    {
-        region<-"500 and 539"
-    }
 
-  Age = sql_reader('dom_age.sql')
-  Age = sql_add(x =paste0('between ',region) , sql_code = Age, flag = '-- insert region')
-  Age = sql_filter(sql_precode = "in", x =species , sql_code = Age, flag = '-- insert species')
-  
-  Dage = sql_run(akfin, Age) %>% data.table() %>%
-      dplyr::rename_all(toupper)
+    # apply wt to Nsamp
+    wide[, Nsamp := Nsamp * wt]
 
-    Dage$AGE1<-Dage$AGE
-    Dage$AGE1[Dage$AGE >= max_age1]=max_age1
+    # SS table columns
+    # Lbin_lo == Lbin_hi == BIN in your original
+    ss <- data.table::data.table(
+      Yr     = as.integer(wide$YEAR),
+      Seas   = as.integer(seas),
+      Flt    = as.integer(flt),
+      Gender = 0L,
+      Part   = 0L,
+      Ageerr = as.integer(ageerr),
+      Lbin_lo = as.numeric(wide$BIN),
+      Lbin_hi = as.numeric(wide$BIN),
+      Nsamp   = as.numeric(wide$Nsamp)
+    )
 
-    len_age_data=data.table(Dage)
-
-
-  len_age_data<-len_age_data[!is.na(AGE)]
-  len_age_data$HAULJOIN<-len_age_data$HAUL_JOIN
-  len_age_data[HAUL_JOIN=="H"]$HAULJOIN<-len_age_data[HAUL_JOIN=="H"]$PORT_JOIN
-
-  
-    if(one_fleet){
-        len_age_data$GEAR2<- 1
-    }else{
-        len_age_data$GEAR2<- 1
-        len_age_data[GEAR=='POT']$GEAR2<- 3
-        len_age_data[GEAR=='HAL']$GEAR2<- 2
+    # attach age columns with SS names a0..aMax
+    # note: your original starts at AGE>0, but SS wants the full vector; a0 will be zeros here.
+    for (a in age_levels) {
+      ss[, paste0("a", a) := as.numeric(wide[[as.character(a)]])]
     }
 
+    data.table::setorder(ss, Yr, Lbin_lo)
 
- 
-  len_age_data2<-len_age_data
+    out_list[[k]] <- ss
+  }
 
+  out_dt <- data.table::rbindlist(out_list, use.names = TRUE, fill = TRUE)
+  out_df <- as.data.frame(out_dt)
 
-# age bins to use for srv length age data
-  bin_width <- 1
-  min_age <- 0
-  max_age <- max_age1
-  age_bins <- seq(min_age,max_age,bin_width)
-  num.ages <- length(age_bins)
-
-  fleets<-sort(unique(len_age_data$GEAR2))
-
-  age_compV<-vector("list",length=length(fleets))
-
-  for( z in 1:length(fleets)){
-
-    len_age_data<-len_age_data2[GEAR2==fleets[z]]
-
-# valid survey years
-    years <- sort(unique(len_age_data$YEAR)) #seq(1984,2016,1)
-    num.years <- length(years)
-
-
-# ---!!!---NOTE---!!!---
-# In AFSC database, SEX = 1 for MALES, SEX = 2 for FEMALES
-# In SS3, SEX = 1 for FEMALES, SEX = 2 for MALES
-
-
-# convert lengths from mm to cm
-#len_age_data$LENGTH <- as.integer(len_age_data$LENGTH / 10)
-
-length<-data.frame(LENGTH=c(1:max(len_age_data$LENGTH)))
-  length$BIN<-max(len_bins1)
-  n<-length(len_bins1)
-  for(i in 2:n-1)
-    {
-       length$BIN[length$LENGTH < len_bins1[((n-i)+1)] ]<-len_bins1[n-i]
-    }
-
-length2<-merge(len_age_data,length,all.x=T)
-
-# subset of the length-age data where age > 0, length > 0, sex is male or female
-# len_age_data.subset <- subset(subset(subset(subset(len_age_data,len_age_data$YEAR %in% years),LENGTH > 0),AGE > 0),SEX %in% c(1,2))
-len_age_data.subset <- subset(subset(subset(length2,length2$YEAR %in% years),LENGTH > 0),AGE > 0)
-dim(len_age_data.subset)
-
-# change ages larger than max_age into max_age
-len_age_data.subset$AGE_FILT <- len_age_data.subset$AGE
-len_age_data.subset$AGE_FILT[len_age_data.subset$AGE > max_age] <- max_age
-
-# sort len_age_data.subset by species, year, length, and sex
-len_age_data.sort <- len_age_data.subset[ order(len_age_data.subset$YEAR, len_age_data.subset$LENGTH, len_age_data.subset$SEX, len_age_data.subset$AGE), ]
-num.rows <- dim(len_age_data.sort)[1]
-
-
-# For the U/N/S Agecomp_obs table:  concatenate the YEAR and LENGTH together to get the total number of rows
-len_age_data.sort$YEAR_LEN <- paste(len_age_data.sort$YEAR,len_age_data.sort$BIN,sep="")
-
-Agecomp_lengths <- sort(unique(len_age_data.sort$YEAR_LEN))
-num.lengths <- length(Agecomp_lengths)
-#num.lengths
-
-
-
-# number of samples in row is in column 9
-nsamples.col <- 9
-num.cols <- nsamples.col + num.ages
-
-Agecomp_obs <- matrix(0,nrow=num.lengths,ncol=num.cols)
-
-# The Year column
-Agecomp_obs[,1] <- as.numeric(substr(Agecomp_lengths,1,4))
-
-# The Seas column
-Agecomp_obs[,2] <- 1
-
-# The Flt/Svy column
-Agecomp_obs[,3] <- fleets[z]
-
-# The Sex column
-Agecomp_obs[,4] <- 0
-# The Ageerr column
-Agecomp_obs[,6] <- 1
-
-# The Lbin_lo and Lbin_hi columns
-Agecomp_obs[,8] <- Agecomp_obs[,7] <- as.numeric(substr(Agecomp_lengths,5,10))
-
-
-
-
-# go through the dataframe ONCE and do both undifferentiated and species-specific summaries
-# column headings of len_age_data(.subset and .sort)
-# "REGION","YEAR","CRUISEJOIN",CRUISE","VESSEL","HAULJOIN","HAUL","SPECIES_CODE","LENGTH","SEX","WEIGHT","MATURITY","AGE","END_LATITUDE","END_LONGITUDE","HAUL_TYPE","GEAR","PERFORMANCE","SPECIMEN_SAMPLE_TYPE","SPECIMENID","BIOSTRATUM"
-for (i in 1:num.rows)
-{
-    idx <- which(paste(len_age_data.sort$YEAR[i],len_age_data.sort$BIN[i],sep="") == Agecomp_lengths,arr.ind=TRUE)
-
-    # for U
-    if (idx > 0 && idx <= num.lengths)
-    {
-        # nsamples column
-        Agecomp_obs[idx,nsamples.col] <- Agecomp_obs[idx,nsamples.col] + 1
-
-        age.col <- nsamples.col + len_age_data.sort$AGE_FILT[i] + 1
-
-        Agecomp_obs[idx,age.col] <- Agecomp_obs[idx,age.col] + 1
-    }
-
-}
-   
-Agecomp_obs[, (nsamples.col+1):num.cols] <- Agecomp_obs[, (nsamples.col+1):num.cols] / Agecomp_obs[, nsamples.col]
-Agecomp_obs[, 9] <- Agecomp_obs[, 9] * wt
-
-
-
-len_data.subset <- subset(subset(len_age_data,len_age_data$YEAR %in% years),LENGTH > 0)
-
-# count of number of unique hauls by species/year/sex or year/sex for all
-data.yrs <- sort(unique(len_data.subset$YEAR))
-num.yrs <- length(data.yrs)
-
-# store number of hauls per year
-haul.count <- rep(0,num.yrs)
-
-# store number of samples per year
-sample.count <- rep(0,num.yrs)
-
-# get count of number of hauls with lengths per year
-for (y in 1:num.yrs)
-{
-    data.subset <- subset(len_data.subset,len_data.subset$YEAR == data.yrs[y])
-    sample.count[y] <- dim(data.subset)[1]
-    haul.count[y] <- length(unique(data.subset$HAULJOIN))
-}
-
-print(data.yrs)
-print(haul.count)
-print(sample.count)
-
-age_compV[[z]]<-Agecomp_obs
-
-}
-
-Agecomp_obs<-do.call(rbind,age_compV)
-output1<-vector("list",length=2)
-#output1$sexed<-Agecomp_obs.sex
-output1$norm<-Agecomp_obs
-
-return(output1)
+  return(list(norm = out_df))
 }

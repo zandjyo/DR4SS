@@ -41,4 +41,8 @@ WHERE
       AND norpac.DEBRIEFED_SPCOMP.SPECIES  
           -- insert species
       AND norpac.DEBRIEFED_LENGTH.SPECIES 
-          -- insert species
+          -- insert spec
+      AND TO_CHAR(norpac.DEBRIEFED_SPCOMP.HAUL_DATE, 'YYYY')
+        -- insert start
+      AND TO_CHAR(norpac.DEBRIEFED_SPCOMP.HAUL_DATE, 'YYYY')
+       -- insert end

@@ -13,7 +13,8 @@ LENGTH_BY_CATCH_short(
   sp_area,
   ly,
   SEX = TRUE,
-  PORT = TRUE
+  PORT = TRUE,
+  use_foreign = TRUE
 )
 }
 \arguments{
@@ -30,6 +31,8 @@ LENGTH_BY_CATCH_short(
 \item{SEX}{Logical; if \code{TRUE}, length compositions are sex-specific.}
 
 \item{PORT}{Logical; if \code{TRUE}, port sampling data are included.}
+
+\item{use_foreign}{Logical; if \code{TRUE}, foreign fishery data are included.}
 }
 \value{
 A list with two elements:

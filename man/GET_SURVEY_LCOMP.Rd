@@ -7,7 +7,7 @@
 GET_SURVEY_LCOMP(
   con_akfin,
   species = 21720,
-  bins = seq(3.5, 119.5, 1),
+  bins = seq(4.5, 119.5, 5),
   bin = TRUE,
   area = "BS",
   sex = 1,
