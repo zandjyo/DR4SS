@@ -168,14 +168,14 @@ Steve Barbeaux Steve.barbeaux@noaa.gov
 Questions, issues, or enhancements should be coordinated within the AFSC assessment community.
 
 
-# Write-up: `fit_age_predictor()` and `predict_age_from_lf()`
+## Write-up: `fit_age_predictor()` and `predict_age_from_lf()`
 
 This document describes the statistical framework used to convert
 fishery length-frequency (LF) data into predicted ages.
 
 ------------------------------------------------------------------------
 
-# 1) Model Overview
+## 1) Model Overview
 
 The workflow has two stages:
 
@@ -193,7 +193,7 @@ The workflow has two stages:
 
 ------------------------------------------------------------------------
 
-# 2) Notation
+## 2) Notation
 
 Let:
 
@@ -212,7 +212,7 @@ A_G = min(max(A, 0), A_max)
 
 ------------------------------------------------------------------------
 
-# 3) Survey Backbone Model (Q3)
+## 3) Survey Backbone Model (Q3)
 
 Survey observations are treated as quarter 3 data.
 
@@ -229,7 +229,7 @@ effects - ε is residual error
 
 ------------------------------------------------------------------------
 
-# 4) Fishery Quarter Delta Model
+## 4) Fishery Quarter Delta Model
 
 Fishery data occur in all quarters. Length-at-age in quarter q is:
 
@@ -248,19 +248,19 @@ random effects - η is residual error
 
 ------------------------------------------------------------------------
 
-# 5) Age Priors
+## 5) Age Priors
 
 Empirical priors are constructed from fishery-aged samples.
 
-## Pooled prior (area × sex)
+### Pooled prior (area × sex)
 
 π_pool(a \| k,s) = N\_{k,s,a} / Σ_a N\_{k,s,a}
 
-## Global prior (sex)
+### Global prior (sex)
 
 π_glob(a \| s) = N\_{s,a} / Σ_a N\_{s,a}
 
-## Cell prior (year × quarter × area × sex)
+### Cell prior (year × quarter × area × sex)
 
 π_cell(a \| y,q,k,s) = N\_{y,q,k,s,a} / Σ_a N\_{y,q,k,s,a}
 
@@ -277,7 +277,7 @@ All priors are normalized.
 
 ------------------------------------------------------------------------
 
-# 6) Likelihood Model
+## 6) Likelihood Model
 
 Length-at-age is modeled as:
 
@@ -291,7 +291,7 @@ Likelihood:
 
 ------------------------------------------------------------------------
 
-# 7) Posterior Distribution
+## 7) Posterior Distribution
 
 Using Bayes' rule:
 
@@ -305,19 +305,19 @@ If numerical failure occurs, a uniform posterior is used.
 
 ------------------------------------------------------------------------
 
-# 8) Outputs
+## 8) Outputs
 
-## posterior_rows
+### posterior_rows
 
 Posterior vector for each unique (YEAR, QUARTER, AREA_K, SEX, LENGTH)
 
-## row_age
+### row_age
 
 MAP estimate: Â = argmax_a p(a \| L,...)
 
 Sampling: Â \~ Categorical(p(a \| L,...))
 
-## agecomp
+### agecomp
 
 Expected counts:
 
@@ -329,7 +329,7 @@ E\[N_a(y,q,k,s)\] = Σ_L n(L) p(a \| L,...)
 
 ------------------------------------------------------------------------
 
-# 9) Interpretation
+## 9) Interpretation
 
 -   The survey backbone anchors the age-length relationship.
 -   The delta model adjusts for seasonal growth differences.
