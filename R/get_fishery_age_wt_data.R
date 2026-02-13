@@ -42,7 +42,8 @@ get_fishery_age_wt_data <- function(con,
     AI     = 540:544,
     BS     = 500:539,
     GOA    = 600:699,
-    BSWGOA = c(500:539, 610:620)
+    BSWGOA = c(500:539, 610:620),
+    ALL    = 500:699
   )
 
   if (is.numeric(region)) {
@@ -133,6 +134,12 @@ get_fishery_age_wt_data <- function(con,
   d[, GEAR2 := 1L]
   d[GEAR == 8, GEAR2 := 2L]
   d[GEAR == 6, GEAR2 := 3L]
+
+    # ---- map gear groups (GEAR3) ----
+  d[, GEAR := toupper(trimws(as.character(GEAR)))]
+  d[, GEAR3 := "TRW"]
+  d[GEAR == 8, GEAR3 := "HAL"]
+  d[GEAR == 6, GEAR3 := "POT"]
 
   data.table::setorder(d, YEAR, MONTH)
 

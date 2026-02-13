@@ -29,6 +29,8 @@ SELECT
       norpac.DEBRIEFED_SPCOMP.HAUL_DATE AS HDAY, 
       norpac.DEBRIEFED_HAUL.NMFS_AREA AS AREA, 
       norpac.DEBRIEFED_HAUL.CATCHER_BOAT_ADFG AS VES_AKR_ADFG,
+      norpac.debriefed_haul.latdd_end,
+      norpac.debriefed_haul.londd_end,
       'DOMESTIC' AS SOURCE 
 FROM norpac.DEBRIEFED_HAUL 
   INNER JOIN norpac.DEBRIEFED_SPCOMP 

@@ -47,7 +47,8 @@ GET_SURV_AGE<- function(con_akfin,
     "AI"    = 52,
     "SLOPE" = 78,
     "BS-WGOA" = c(47,98,143),
-    stop("Not a valid `area`. Use GOA, BS, NBS, BS-NBS, AI, BS-WGOA, or SLOPE.", call. = FALSE)
+    "ALL" = c(47,52,78,98,143),
+    stop("Not a valid `area`. Use GOA, BS, NBS, BS-NBS, AI, BS-WGOA, SLOPE, or ALL.", call. = FALSE)
   )
 
   # ---- query using packaged SQL template ----

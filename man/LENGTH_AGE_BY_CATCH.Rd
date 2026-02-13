@@ -2,7 +2,7 @@
 % Please edit documentation in R/LENGTH_AGE_BY_CATCH.r
 \name{LENGTH_AGE_BY_CATCH}
 \alias{LENGTH_AGE_BY_CATCH}
-\title{Construct catch-weighted length compositions for Stock Synthesis}
+\title{Construct catch-weighted length or age compositions for Stock Synthesis}
 \usage{
 LENGTH_AGE_BY_CATCH(
   con_akfin,
@@ -17,141 +17,111 @@ LENGTH_AGE_BY_CATCH(
   PORT = TRUE,
   age_length = c("LENGTH", "AGE"),
   map_sample = c("MAP", "sample"),
-  max_age = 12
+  max_length = NULL,
+  max_age = 12L,
+  verbose = TRUE,
+  seed = 1L,
+  season_def = NULL,
+  season_month = c("MONTH", "MONTH_WED"),
+  region_def = NULL,
+  drop_unmapped = TRUE,
+  wgoa_cod = TRUE
 )
 }
 \arguments{
-\item{species}{Observer species code.}
+\item{con_akfin}{DBI connection to AKFIN.}
 
-\item{species_catch}{Catch accounting species identifier used in blend catch.}
+\item{con_afsc}{DBI connection to AFSC.}
 
-\item{species_srv}{RACE species code.}
+\item{species}{Numeric observer species code used in observer/port length SQL.}
 
-\item{sp_area}{Stock assessment area (e.g., "BS", "GOA", "AI").}
+\item{species_catch}{Catch accounting species identifier used in blend catch SQL.}
 
-\item{start_year}{first year to include, do not include any data prior to 1990.}
+\item{species_srv}{RACE species code used in survey age pull (GET_SURV_AGE).}
 
-\item{SEX}{Logical; if \code{TRUE}, length compositions are sex-specific.}
+\item{sp_area}{Stock assessment area code: "BS","AI","GOA","BSWGOA".
+Used for default region filtering (if \code{region_def} is NULL) and passed to
+age-predictor helper functions.}
 
-\item{PORT}{Logical; if \code{TRUE}, port sampling data are included.}
+\item{start_year}{First year to include (must be >= 1990).}
 
-\item{age_length}{= c("LENGTH","AGE") whether to prepare length or age composition}
+\item{end_year}{Last year to include.}
 
-\item{map_sample}{= c("MAP","sample") when returning integer ages, use "MAP" or "sample".}
+\item{SEX}{Logical. If TRUE, compositions are sex-specific (SS 1/2/3 coding).}
 
-\item{max_age}{Plus-group maximum age.}
+\item{PORT}{Logical. If TRUE, include port sampling data when available.}
 
-\item{ly}{Final year to include.}
+\item{age_length}{"LENGTH" or "AGE". If "AGE", lengths are converted to predicted ages.}
+
+\item{map_sample}{"MAP" or "sample" used by predict_age_from_lf() when returning integer ages.}
+
+\item{max_length}{Optional numeric. If provided, drop rows in ALL_DATA with LENGTH > max_length
+(applied before AGE prediction, so it affects the predictor inputs too).}
+
+\item{max_age}{Plus-group maximum age (used when age_length="AGE").}
+
+\item{verbose}{Logical. If TRUE, print data availability summaries while running.}
+
+\item{seed}{RNG seed when sampling (used when age_length="AGE").}
+
+\item{season_def}{Optional named list mapping season labels to month integers (1..12),
+e.g. list(A=1:3,B=4:6,C=7:9,D=10:12) or list(A=1:6,B=7:12).}
+
+\item{season_month}{Which month column to use for season mapping: "MONTH" or "MONTH_WED".
+Default "MONTH".}
+
+\item{region_def}{Optional named list mapping REGION_GRP labels to AREA codes, e.g.
+list(BS=500:539, WGOA=c(610,620), CGOA=630:649). If provided, outputs are by REGION_GRP.
+If NULL, a single REGION_GRP is used (equal to \code{sp_area}) and default area filtering is used.}
+
+\item{drop_unmapped}{Logical. If TRUE and region_def is provided, drop rows whose AREA does not map
+to a REGION_GRP. Default TRUE.}
+
+\item{wgoa_cod}{Logical. If TRUE, moves catch from NMFS area 620 west of -158 longitude into the 610 region group}
 }
 \value{
 A list with two elements:
 \describe{
-\item{aggregated}{Annual length compositions for a single aggregated fishery.}
-\item{by_gear}{Annual length compositions split by gear.}
+\item{aggregated}{data.table of YEAR x REGION_GRP x LENGTH/AGE (and optionally SEASON/SEX) with FREQ and sample summaries.}
+\item{by_gear}{data.table of YEAR x REGION_GRP x GEAR x LENGTH/AGE (and optionally SEASON/SEX) with FREQ and sample summaries.}
 }
 }
 \description{
-Builds annual fishery length compositions by reweighting observed length
-frequencies from at-sea observer and (optionally) port sampling so that they
-are proportional to total catch in numbers derived from blend catch data.
-Output is suitable for use as length composition input to Stock Synthesis,
-either as a single aggregated fishery or split by gear.
+Builds annual fishery length (or age) compositions by reweighting observed
+length-frequency samples (observer + optional port) so they are proportional
+to total catch in numbers derived from AKFIN blend catch.
+
+If \code{age_length="AGE"}, observed lengths are first converted to predicted ages
+(bulk) using \code{predict_age_from_lf()} with an age predictor fit from:
+(1) survey age data (Q3 backbone) and (2) fishery age data (quarter deltas),
+plus shrinkage priors from fishery ages.
+
+If \code{season_def} is provided, outputs are returned by YEAR x SEASON (and by GEAR,
+and optionally SEX), where SEASON is a user-defined mapping of months to season
+labels (e.g., quarters, halves, custom month groupings).
+
+If \code{region_def} is provided, outputs are returned by YEAR x REGION_GRP (and
+optionally SEASON, GEAR, SEX), where REGION_GRP is a user-defined mapping of
+AKFIN/observer AREA codes (e.g., 500:539, 610, 620, etc.) to region labels.
 }
 \details{
-This function combines length-frequency observations, species composition
-expansions, and blend catch information to estimate length compositions that
-reflect total fishery removals in numbers.
-
-The workflow is:
+Workflow:
 \enumerate{
-\item Pull observer and (optionally) port-based length-frequency data and
-associated species composition expansions that provide an estimated number
-of fish represented by each haul or delivery.
-\item Pull domestic blend catch (and historical foreign catch, where
-applicable), convert catch weight (tons) to numbers using an average weight
-(AVEWT) estimated from observer data.
-\item Distribute catch numbers across lengths using a hierarchical weighting
-scheme that accounts for within-haul length proportions, haul-level
-representation within strata, and stratum-level contributions to total
-catch.
-\item Produce annual length compositions either as a single aggregated
-fishery or split by gear (HAL, POT, TRW).
-\item Calculate auxiliary sample-size summaries (number of samples, hauls,
-and strata); bootstrap effective sample sizes are retained as placeholders
-for consistency with legacy implementations.
+\item Pull observer length-frequency + species composition expansions (AKFIN).
+\item Optionally pull port length-frequency across eras:
+\itemize{
+\item 1990–1998 (AFSC)
+\item 1999–2007 (AFSC lengths + AKFIN fish tickets; uses fuzzy matching)
+\item 2008–2010 (AFSC lengths + fuzzy matching to fish tickets)
+\item 2011–present (AFSC; direct landings fields)
+The \code{fuzzy_dates()} steps are retained because they are required to recover
+port samples that do not join to fish tickets by ID.
 }
-
-Length compositions are constructed on an integer length grid and are
-normalized to sum to one within each year (and gear, if applicable). Strata
-with insufficient observed sample size are excluded.
+\item Optionally filter ALL_DATA by \code{max_length} (removes LENGTH > max_length).
+\item If AGE mode, build predictor and convert LENGTH -> AGE_HAT in bulk.
+\item Pull blend catch (AKFIN) and convert tons to numbers using AVEWT derived
+from observer data with hierarchical fallback across strata.
+\item Compute hierarchical weights and produce compositions (optionally by season
+and/or user-defined region group).
 }
-\section{Mathematical formulation}{
-
-
-Let a stratum be indexed by
-\deqn{s \equiv (y, a, g, m)}
-where \eqn{y} is year, \eqn{a} is area (AREA2), \eqn{g} is gear, and \eqn{m} is
-month. Let \eqn{h} index hauls or deliveries within stratum \eqn{s}, \eqn{l}
-index integer length, and \eqn{k} index sex when \code{SEX = TRUE}.
-
-Observed length frequency in haul \eqn{h}:
-\deqn{f_{h,l,(k)}}
-
-Total observed frequency in haul \eqn{h}:
-\deqn{F_h = \sum_l f_{h,l,(k)}}
-
-Estimated number of fish represented by haul \eqn{h}:
-\deqn{N_h}
-
-Total estimated numbers in stratum \eqn{s}:
-\deqn{N_s = \sum_{h \in s} N_h}
-
-Total catch in numbers from blend catch in stratum \eqn{s}:
-\deqn{C_s}
-
-with totals
-\deqn{C_{y,g} = \sum_{a,m} C_{y,a,g,m}, \qquad
-      C_y = \sum_{a,g,m} C_{y,a,g,m}}
-
-Within-haul length proportion:
-\deqn{p_{h,l,(k)} = \frac{f_{h,l,(k)}}{F_h}}
-
-Haul weight within stratum:
-\deqn{w_{h \mid s} = \frac{N_h}{N_s}}
-
-For the single aggregated fishery model (all gears pooled within year),
-stratum weight is:
-\deqn{w^{single}_{s \mid y} = \frac{C_s}{C_y}}
-
-and the contribution of haul \eqn{h} at length \eqn{l} is:
-\deqn{
-W^{single}_{h,l,(k)} =
-p_{h,l,(k)} \cdot w_{h \mid s} \cdot w^{single}_{s \mid y}
-}
-
-For the split-by-gear model, stratum weight is:
-\deqn{w^{gear}_{s \mid y,g} = \frac{C_s}{C_{y,g}}}
-
-and the contribution becomes:
-\deqn{
-W^{gear}_{h,l,(k)} =
-p_{h,l,(k)} \cdot w_{h \mid s} \cdot w^{gear}_{s \mid y,g}
-}
-
-Final length compositions are obtained by summing the appropriate weights
-across hauls and strata and normalizing so that proportions sum to one.
-
-Catch weight is converted to numbers using:
-\deqn{
-\hat{N} = \frac{\text{tons landed}}{\bar{w} / 1000}
-}
-where \eqn{\bar{w}} is the average individual weight estimated from observer
-data using a hierarchical fallback across strata.
-
-Only strata with at least 30 observed length counts are retained.
-}
-
-\references{
-Alaska Fisheries Science Center. Stock assessment length composition
-construction methods used in recent North Pacific groundfish assessments.
 }
