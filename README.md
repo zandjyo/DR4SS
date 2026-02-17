@@ -168,6 +168,10 @@ Steve Barbeaux Steve.barbeaux@noaa.gov
 Questions, issues, or enhancements should be coordinated within the AFSC assessment community.
 
 
+## Additional information on methods
+
+
+
 ## Write-up: `fit_age_predictor()` and `predict_age_from_lf()`
 
 This document describes the statistical framework used to convert

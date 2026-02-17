@@ -682,12 +682,12 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
     priority = c("YAGM_AVE_WT","YGM_AVE_WT","YGQ_AVE_WT","YAM_AVE_WT","YG_AVE_WT")
   )
 
-  CATCHT[, NUMBER := TONS / (CATCHT2$AVEWT / 1000)]
-  CATCHT[, SPECIES := as.numeric(species)]
-  CATCHT <- CATCHT[is.finite(NUMBER) & NUMBER > 0]
+  CATCHT2[, NUMBER := TONS / (CATCHT2$AVEWT / 1000)]
+  CATCHT2[, SPECIES := as.numeric(species)]
+  CATCHT2 <- CATCHT2[is.finite(NUMBER) & NUMBER > 0]
 
   # NOTE: now include REGION_GRP in catch totals so compositions are per-region
-  CATCHT4 <- CATCHT[, .(YAGM_TNUM = sum(NUMBER), YAGM_TONS = sum(TONS)),
+  CATCHT4 <- CATCHT2[, .(YAGM_TNUM = sum(NUMBER), YAGM_TONS = sum(TONS)),
                     by = .(REGION_GRP, SPECIES, YEAR, GEAR, AREA2, MONTH)]
 
   xt_YAG <- CATCHT4[, .(YAG_TNUM = sum(YAGM_TNUM)), by = .(REGION_GRP, YEAR, AREA2, GEAR)]

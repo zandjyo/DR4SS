@@ -1,0 +1,323 @@
+---
+title: "Age–Length Predictor: Mathematical Description"
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+    number_sections: true
+vignette: >
+  %\VignetteIndexEntry{Age–Length Predictor: Mathematical Description}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", fig.width = 7, fig.height = 4)
+```
+
+# Overview
+
+This vignette documents the mathematics implemented by two functions:
+
+- `fit_age_predictor()` – fits an age–length predictor using a **survey quarter-3 backbone** plus a **fishery quarter delta** model, and builds **empirical age priors**.
+- `predict_age_from_lf()` – applies the fitted predictor to fishery length-frequency (LF) data in bulk, producing either posteriors by row, predicted ages, or expected age compositions.
+
+Throughout, ages are pooled to a plus-group:
+
+\[
+a \in \{0,1,\dots,A\}, \quad A = \texttt{maxage},
+\]
+
+with observed ages mapped to
+
+\[
+a_g = \min(\max(a_{\text{obs}},0), A).
+\]
+
+We denote:
+- year by \(y\),
+- quarter by \(q \in \{1,2,3,4\}\),
+- area key by \(k\),
+- sex by \(s \in \{F,M\}\) (and optionally \(U\) for unknown/combined),
+- (fish) length by \(L\) (cm).
+
+# Math write-up: `fit_age_predictor()`
+
+## Data structure
+
+### Survey aged data (Q3 backbone)
+
+Survey data provide \((L, a_g, y, k, s)\) but are treated as quarter 3:
+
+\[
+q \equiv 3.
+\]
+
+### Fishery aged data (quarter deltas)
+
+Fishery ages provide \((L, a_g, y, q, k, s)\) with \(q \in \{1,2,3,4\}\).
+
+## Step 1: Survey backbone model \( \mu_{Q3}(a_g, s, y, k)\)
+
+The backbone models expected length in quarter 3 as a smooth function of age, with sex-specific smooths and random effects for year and area:
+
+\[
+L \;=\; \mu_{Q3}(a_g, s, y, k) + \varepsilon_s,
+\]
+
+implemented as a GAM:
+
+\[
+\mu_{Q3}(a_g,s,y,k)=
+\beta_0
++ \beta_{s}
++ f_s(a_g)
++ b_y
++ b_k,
+\]
+
+where
+
+- \(f_s(\cdot)\) is a sex-specific smooth over age,
+- \(b_y\) is a year random effect,
+- \(b_k\) is an area random effect.
+
+The fitted object is stored as `survey_fit`.
+
+## Step 2: Fishery quarter delta model \( \delta_q(a_g, s, y, k)\)
+
+Fishery length-at-age varies by quarter; we model the deviation from the Q3 backbone:
+
+\[
+\Delta = L_{\text{fish}} - \mu_{Q3}(a_g,s,y,k).
+\]
+
+Then fit a second GAM:
+
+\[
+\Delta \;=\; \delta_q(a_g,s,y,k) + \eta,
+\]
+
+with:
+
+\[
+\delta_q(a_g,s,y,k)=
+\alpha_q
++ g_q(a_g)
++ \gamma_s
++ u_y
++ u_k,
+\]
+
+where
+
+- \(\alpha_q\) is a quarter main effect,
+- \(g_q(\cdot)\) is a quarter-specific smooth over age,
+- \(\gamma_s\) is a sex effect,
+- \(u_y\) and \(u_k\) are year/area random effects.
+
+The fitted object is stored as `delta_fit`.
+
+### Predicted mean length in quarter \(q\)
+
+For any \((y,q,k,s,a_g)\), the predictor implies:
+
+\[
+\mu_q(a_g,s,y,k) \;=\; \mu_{Q3}(a_g,s,y,k) + \delta_q(a_g,s,y,k).
+\]
+
+## Step 3: Empirical priors over age
+
+`fit_age_predictor()` constructs empirical priors from the fishery aged data (after plus-grouping). Let \(N(\cdot)\) be counts.
+
+### Global prior (by sex)
+
+\[
+p_{\text{glob}}(a \mid s) \;=\; \frac{N(s,a)}{\sum_{a'} N(s,a')}.
+\]
+
+### Pooled prior (by area and sex)
+
+\[
+p_{\text{pool}}(a \mid k,s) \;=\; \frac{N(k,s,a)}{\sum_{a'} N(k,s,a')}.
+\]
+
+### Cell prior (by year, quarter, area, sex)
+
+\[
+p_{\text{cell}}(a \mid y,q,k,s) \;=\; \frac{N(y,q,k,s,a)}{\sum_{a'} N(y,q,k,s,a')},
+\]
+
+with cell sample size
+
+\[
+N_{\text{cell}}(y,q,k,s) = \sum_{a} N(y,q,k,s,a).
+\]
+
+### Mixing rule for priors
+
+If \(N_{\text{cell}}(y,q,k,s) \ge n_{\min}\) (`min_n_cell`), use a mixture of cell and pooled/global:
+
+\[
+p(a \mid y,q,k,s) =
+\lambda \, p_{\text{cell}}(a \mid y,q,k,s)
++ (1-\lambda)\, p_{\text{base}}(a \mid k,s),
+\]
+
+where \(\lambda = \texttt{prior\_mix}\), and \(p_{\text{base}}\) is:
+
+- \(p_{\text{pool}}(a \mid k,s)\) if available,
+- otherwise \(p_{\text{glob}}(a \mid s)\).
+
+If \(N_{\text{cell}} < n_{\min}\), then:
+
+\[
+p(a \mid y,q,k,s) = p_{\text{base}}(a \mid k,s).
+\]
+
+These prior tables are stored as `prior_global`, `prior_pool`, and `prior_cell`.
+
+# Math write-up: `predict_age_from_lf()`
+
+## Inputs and collapsing
+
+Length-frequency input rows require at least:
+
+\[
+(L, s, m, y, \text{area}),
+\]
+
+with optional counts \(N\). If missing, `predict_age_from_lf()` sets \(N=1\) per row.
+
+Month \(m\) is mapped to quarter \(q\) (the same rule used elsewhere):
+
+- \(q=1\) if \(m<3\),
+- \(q=2\) if \(3 \le m < 7\),
+- \(q=3\) if \(7 \le m < 10\),
+- \(q=4\) otherwise.
+
+Rows are collapsed to unique keys:
+
+\[
+(y,q,k,s,L),
+\]
+
+summing counts \(N\) within each key, to avoid redundant posterior computations.
+
+## Likelihood of length given age
+
+For each unique key \((y,q,k,s,L)\), compute predicted mean lengths across ages:
+
+\[
+\mu_q(a \mid y,q,k,s), \quad a \in \{0,\dots,A\}.
+\]
+
+The function uses a Gaussian likelihood:
+
+\[
+\mathcal{L}(L \mid a, y,q,k,s) =
+\phi\!\left(L; \mu_q(a \mid y,q,k,s), \sigma_q\right),
+\]
+
+where \(\phi(\cdot; \mu,\sigma)\) is the normal density.
+
+### Residual scale \(\sigma_q\)
+
+The implementation estimates a single residual scale by combining residual standard deviations from both GAMs:
+
+\[
+\sigma_q = \sqrt{\sigma_{\text{survey}}^2 + \sigma_{\Delta}^2},
+\]
+
+where \(\sigma_{\text{survey}}\) is the SD of residuals from `survey_fit`, and \(\sigma_{\Delta}\) is the SD of residuals from `delta_fit`. (If this fails, it falls back to a finite positive alternative.)
+
+## Prior over age
+
+Compute the prior vector:
+
+\[
+p(a \mid y,q,k,s)
+\]
+
+using the mixing rule described in the `fit_age_predictor()` section.
+
+If sex is unknown/combined \(s=U\), the function uses an average of the sex-specific priors (and means) for \(F\) and \(M\):
+
+\[
+p(a \mid y,q,k,U) = \tfrac{1}{2}\left[p(a \mid y,q,k,F) + p(a \mid y,q,k,M)\right],
+\]
+
+and similarly for \(\mu_q(a)\).
+
+## Posterior over age
+
+For each unique key, compute an unnormalized posterior:
+
+\[
+\tilde{p}(a \mid L,y,q,k,s) \propto
+\mathcal{L}(L \mid a,y,q,k,s)\; p(a \mid y,q,k,s),
+\]
+
+then normalize:
+
+\[
+p(a \mid L,y,q,k,s) =
+\frac{\tilde{p}(a \mid L,y,q,k,s)}{\sum_{a'=0}^{A} \tilde{p}(a' \mid L,y,q,k,s)}.
+\]
+
+This posterior is stored as a vector of length \(A+1\) for each unique key.
+
+## Outputs
+
+### 1) `target="posterior_rows"`
+
+Returns one row per unique \((y,q,k,s,L)\) with:
+
+- total count \(N\),
+- posterior vector \(p(a \mid L,y,q,k,s)\).
+
+### 2) `target="row_age"`
+
+Assigns an integer age to each unique key and joins back to original rows.
+
+- **MAP (maximum a posteriori)**:
+
+\[
+\widehat{a} = \arg\max_{a \in \{0,\dots,A\}} p(a \mid L,y,q,k,s).
+\]
+
+- **Sampling**:
+
+\[
+\widehat{a} \sim \text{Categorical}\big(p(a \mid L,y,q,k,s)\big),
+\]
+
+with RNG seed `seed`.
+
+The output appends `AGE_HAT` (and `AGE_METHOD`) to each original row.
+
+### 3) `target="agecomp"`
+
+Computes expected age counts for each unique key:
+
+\[
+\mathbb{E}[N_a \mid L,y,q,k,s] = N \cdot p(a \mid L,y,q,k,s),
+\]
+
+then aggregates across keys:
+
+\[
+\mathbb{E}[N_a \mid y,q,k,s] = \sum_{L} \mathbb{E}[N_a \mid L,y,q,k,s].
+\]
+
+Returned columns:
+
+\[
+(y, q, k, s, a, \mathbb{E}[N_a]).
+\]
+
+# Practical notes
+
+- The model is **generative in length given age** (not age given length), then uses Bayes’ rule to infer age posteriors.
+- Priors are empirical from fishery aged data and can stabilize posteriors when length–age overlap is strong.
+- Because Q3 is treated as the backbone, prediction for other quarters inherits structure from Q3 plus an estimated quarter-specific delta.

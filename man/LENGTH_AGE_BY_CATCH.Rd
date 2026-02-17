@@ -71,7 +71,7 @@ e.g. list(A=1:3,B=4:6,C=7:9,D=10:12) or list(A=1:6,B=7:12).}
 Default "MONTH".}
 
 \item{region_def}{Optional named list mapping REGION_GRP labels to AREA codes, e.g.
-list(BS=500:539, WGOA=c(610,620), CGOA=630:649). If provided, outputs are by REGION_GRP.
+listlist(BS=c(500:539),WGOA=c(610),CGOA=c(620:649),EGOA=650:659),AI=c(541:544)). If provided, outputs are by REGION_GRP.
 If NULL, a single REGION_GRP is used (equal to \code{sp_area}) and default area filtering is used.}
 
 \item{drop_unmapped}{Logical. If TRUE and region_def is provided, drop rows whose AREA does not map
