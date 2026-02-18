@@ -86,6 +86,7 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
                                 map_sample = c("MAP","sample"),
                                 max_length = NULL,
                                 max_age = 12L,
+                                max_wt = 50L,
                                 verbose = TRUE,
                                 seed = 1L,
                                 season_def = NULL,
@@ -591,19 +592,18 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
     
 
     fish_raw <- get_fishery_age_wt_data(
-      con      = con_akfin,
-      species  = species,
-      region   = sp_area,
-      year_min = start_year
+                  con=con_akfin,
+                  species=species,
+                  season_def=season_def,
+                  region_def=region_def,
+                  start_year = start_year,
+                  end_year = end_year,
+                  wgoa_cod=wgoa_cod,
+                  max_wt=50,
+                  drop_unmapped=drop_unmapped
     )
     fish_raw <- DT(fish_raw)
-    fish_raw <- fish_raw[YEAR >= start_year & YEAR <= end_year]
-
-    if(isTRUE(wgoa_cod)){fish_raw[NMFS_AREA == 620 & LONDD_END <= -158]$NMFS_AREA <- 610
-                         fish_raw[AREA == 62 & LONDD_END <= -158]$AREA <- "61"}  ## for WGOA Pcod
-
-    fish_raw<-add_region_group(fish_raw, region_def = region_def, area_col = "NMFS_AREA", drop_unmapped = drop_unmapped)
-
+    
     if (nrow(fish_raw[!is.na(AGE)]) == 0) stop("No fishery age data available for age predictor.", call. = FALSE)
 
     if (isTRUE(verbose)) {

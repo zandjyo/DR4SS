@@ -2,7 +2,7 @@
 % Please edit documentation in R/foreign_length_by_catch.R
 \name{foreign_length_by_catch}
 \alias{foreign_length_by_catch}
-\title{Construct catch-weighted length compositions for Stock Synthesis}
+\title{Foreign length composition weighted by foreign catch}
 \usage{
 foreign_length_by_catch(
   con_akfin,
@@ -20,131 +20,69 @@ foreign_length_by_catch(
 )
 }
 \arguments{
-\item{species}{Observer species code.}
+\item{con_akfin}{A live DBI connection to the AKFIN (or equivalent) database used by
+\code{sql_run()}.}
 
-\item{for_species_catch}{Foreign catch species identifier.}
+\item{species}{Numeric species code used in the length-frequency query (e.g., 202).}
 
-\item{SEX}{Logical; if \code{TRUE}, length compositions are sex-specific.}
+\item{for_species_catch}{Character species label used in the catch query (e.g., \code{"PACIFIC COD"}).}
 
-\item{species_catch}{Catch accounting species identifier used in blend catch.}
+\item{start_year, end_year}{Numeric scalar years defining the inclusive year range.}
 
-\item{sp_area}{Stock assessment area (e.g., "BS", "GOA", "AI").}
+\item{SEX}{Logical; if \code{TRUE}, keep sex-specific compositions (expects a \code{SEX} column).
+If \code{FALSE}, sexes are pooled.}
 
-\item{ly}{Final year to include.}
+\item{season_def}{Optional named list mapping seasons to months, e.g.
+\code{list(A = 1:4, B = 5:12)}. If provided, outputs include \code{SEASON} and months not mapped
+are dropped (with a message when \code{verbose=TRUE}).}
 
-\item{PORT}{Logical; if \code{TRUE}, port sampling data are included.}
+\item{region_def}{Named list mapping region labels to AREA codes. Must be non-overlapping.
+Default corresponds to common Alaska groundfish groupings (BS/WGOA/CGOA/EGOA/AI).}
 
-\item{use_foreign}{Logical; if \code{TRUE}, foreign fishery data are included.}
+\item{drop_unmapped}{Logical; drop rows whose AREA does not map into \code{region_def}.}
+
+\item{wgoa_cod}{Logical; if \code{TRUE}, optionally remaps selected WGOA areas based on longitude
+(see code block).}
+
+\item{verbose}{Logical; emit summaries and progress messages.}
 }
 \value{
-A list with two elements:
+A named list with two \code{data.table}s:
 \describe{
-\item{aggregated}{Annual length compositions for a single aggregated fishery.}
-\item{by_gear}{Annual length compositions split by gear.}
+\item{\code{aggregated}}{Compositions aggregated across gear. Columns include REGION_GRP, YEAR,
+LENGTH (and optionally SEASON, SEX), FREQ, plus sample size summaries (NSAMP, NHAUL, NSTRATA).}
+\item{\code{by_gear}}{Compositions by gear. Columns include REGION_GRP, YEAR, GEAR, LENGTH
+(and optionally SEASON, SEX), FREQ, plus sample size summaries.}
 }
 }
 \description{
-Builds annual fishery length compositions by reweighting observed length
-frequencies from at-sea observer and (optionally) port sampling so that they
-are proportional to total catch in numbers derived from blend catch data.
-Output is suitable for use as length composition input to Stock Synthesis,
-either as a single aggregated fishery or split by gear.
+Builds annual (or seasonal) foreign length compositions by region (and optionally sex),
+using observer length frequencies reweighted to foreign catch totals. The weighting follows
+a multi-stage approach: within-haul frequency scaling, haul-to-stratum scaling, and expansion
+to catch-based totals (overall and by-gear variants).
 }
 \details{
-This function combines length-frequency observations, species composition
-expansions, and blend catch information to estimate length compositions that
-reflect total fishery removals in numbers.
-
-The workflow is:
+The function:
 \enumerate{
-\item Pull observer and (optionally) port-based length-frequency data and
-associated species composition expansions that provide an estimated number
-of fish represented by each haul or delivery.
-\item Pull domestic blend catch (and historical foreign catch, where
-applicable), convert catch weight (tons) to numbers using an average weight
-(AVEWT) estimated from observer data.
-\item Distribute catch numbers across lengths using a hierarchical weighting
-scheme that accounts for within-haul length proportions, haul-level
-representation within strata, and stratum-level contributions to total
-catch.
-\item Produce annual length compositions either as a single aggregated
-fishery or split by gear (HAL, POT, TRW).
-\item Calculate auxiliary sample-size summaries (number of samples, hauls,
-and strata); bootstrap effective sample sizes are retained as placeholders
-for consistency with legacy implementations.
+\item Pulls foreign observer length frequency data for \code{species} and requested areas/years.
+\item Computes mean weights (AVEWT) at several strata resolutions (YEAR-AREA2-MONTH-GEAR, etc.)
+and uses a priority fallback to assign \code{AVEWT} to catch rows.
+\item Pulls foreign catch (tons) for \code{for_species_catch} and converts to numbers using AVEWT.
+\item Joins observer length data to catch numbers by REGION_GRP/YEAR/AREA2/GEAR/MONTH.
+\item Computes weights:
+\describe{
+\item{\code{WEIGHT1}}{Within-haul share: \code{SUM_FREQUENCY / YAGMH_SFREQ}}
+\item{\code{WEIGHT2}}{Haul-to-stratum scaling: \code{YAGMH_SNUM / YAGM_SNUM}}
+\item{\code{WEIGHT3}}{Gear share of annual catch numbers: \code{YAGM_TNUM / YG_TNUM}}
+\item{\code{WEIGHT4}}{Stratum share of annual catch numbers: \code{YAGM_TNUM / Y_TNUM}}
 }
-
-Length compositions are constructed on an integer length grid and are
-normalized to sum to one within each year (and gear, if applicable). Strata
-with insufficient observed sample size are excluded.
+\item Produces normalized compositions \code{FREQ} on a dense 1:maxL grid for:
+\itemize{
+\item aggregated (by REGION_GRP x YEAR \link{x SEASON} \link{x SEX})
+\item by-gear (by REGION_GRP x YEAR x GEAR \link{x SEASON} \link{x SEX})
 }
-\section{Mathematical formulation}{
-
-
-Let a stratum be indexed by
-\deqn{s \equiv (y, a, g, m)}
-where \eqn{y} is year, \eqn{a} is area (AREA2), \eqn{g} is gear, and \eqn{m} is
-month. Let \eqn{h} index hauls or deliveries within stratum \eqn{s}, \eqn{l}
-index integer length, and \eqn{k} index sex when \code{SEX = TRUE}.
-
-Observed length frequency in haul \eqn{h}:
-\deqn{f_{h,l,(k)}}
-
-Total observed frequency in haul \eqn{h}:
-\deqn{F_h = \sum_l f_{h,l,(k)}}
-
-Estimated number of fish represented by haul \eqn{h}:
-\deqn{N_h}
-
-Total estimated numbers in stratum \eqn{s}:
-\deqn{N_s = \sum_{h \in s} N_h}
-
-Total catch in numbers from blend catch in stratum \eqn{s}:
-\deqn{C_s}
-
-with totals
-\deqn{C_{y,g} = \sum_{a,m} C_{y,a,g,m}, \qquad
-      C_y = \sum_{a,g,m} C_{y,a,g,m}}
-
-Within-haul length proportion:
-\deqn{p_{h,l,(k)} = \frac{f_{h,l,(k)}}{F_h}}
-
-Haul weight within stratum:
-\deqn{w_{h \mid s} = \frac{N_h}{N_s}}
-
-For the single aggregated fishery model (all gears pooled within year),
-stratum weight is:
-\deqn{w^{single}_{s \mid y} = \frac{C_s}{C_y}}
-
-and the contribution of haul \eqn{h} at length \eqn{l} is:
-\deqn{
-W^{single}_{h,l,(k)} =
-p_{h,l,(k)} \cdot w_{h \mid s} \cdot w^{single}_{s \mid y}
 }
-
-For the split-by-gear model, stratum weight is:
-\deqn{w^{gear}_{s \mid y,g} = \frac{C_s}{C_{y,g}}}
-
-and the contribution becomes:
-\deqn{
-W^{gear}_{h,l,(k)} =
-p_{h,l,(k)} \cdot w_{h \mid s} \cdot w^{gear}_{s \mid y,g}
 }
-
-Final length compositions are obtained by summing the appropriate weights
-across hauls and strata and normalizing so that proportions sum to one.
-
-Catch weight is converted to numbers using:
-\deqn{
-\hat{N} = \frac{\text{tons landed}}{\bar{w} / 1000}
-}
-where \eqn{\bar{w}} is the average individual weight estimated from observer
-data using a hierarchical fallback across strata.
-
-Only strata with at least 30 observed length counts are retained.
-}
-
-\references{
-Alaska Fisheries Science Center. Stock assessment length composition
-construction methods used in recent North Pacific groundfish assessments.
+\seealso{
+\code{\link[data.table]{data.table}}, \code{\link[lubridate]{month}}
 }

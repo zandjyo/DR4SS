@@ -1,19 +1,44 @@
 #' Make SS WTAGE and NAGE with safe filling for missing ages
+#' Build Stock Synthesis WTAGE and NAGE blocks from long WAA output
 #'
-#' Fills missing WTAGE cells (where NAGE==0 or WTAGE is NA) using a pooled
-#' reference curve by Fleet x gender, then optionally smooths internal gaps.
-#' Ensures all a0..amax are filled for Stock Synthesis.
+#' Converts long-format weight-at-age (WAA) estimates and aged-data counts into
+#' Stock Synthesis-style wide WTAGE and NAGE tables (a0..aMax). Supports optional
+#' stratification by gear and sex, and when present in the inputs, can additionally
+#' stratify by \code{REGION_GRP} and \code{SEASON}.
 #'
-#' @param out_long Long WAA output (YEAR, AGE_YRS, WAA, plus optional GEAR2/SEX).
-#' @param aged_pred Row-level aged data to build NAGE (YEAR, AGE_YRS, optional GEAR2/SEX).
-#' @param maxage Plus-group age.
-#' @param gear_mode "combined" or "by_gear".
-#' @param sex_mode "combined" or "split".
-#' @param seas,GP,bseas SS header values.
-#' @param fill_policy One of c("pooled_median","pooled_smooth"). Default pooled_median.
-#' @param internal_interp Logical; if TRUE, linearly interpolate internal gaps within-year.
+#' @details
+#' \itemize{
+#'   \item WTAGE is constructed by pivoting \code{out_long} to wide age columns (a0..aMax).
+#'   \item NAGE is constructed from \code{aged_pred} as counts-at-age (either \code{sum(N_AL)} if present,
+#'         otherwise row counts).
+#'   \item Missing WTAGE cells (or ages with NAGE==0) are filled using a pooled reference curve
+#'         (median across years by Fleet x gender), with optional internal interpolation across ages.
+#' }
 #'
-#' @return WTAGE/NAGE lists (split by sex if requested)
+#' If \code{SEASON} exists in both inputs, it is written into the Stock Synthesis \code{seas} column
+#' (overriding the scalar \code{seas} argument). If \code{REGION_GRP} exists and \code{gear_mode="by_gear"},
+#' the \code{Fleet} column is set to \code{paste(REGION_GRP, GEAR2, sep="_")}. These Fleet labels may not be
+#' Stock Synthesis compliant; they are intended as intermediate identifiers that can be remapped by the
+#' assessment author after defining fleets/seasons.
+#'
+#' @param out_long Long-format WAA output with columns \code{YEAR}, \code{AGE_YRS}, \code{WAA}, and optionally
+#'   \code{GEAR2}, \code{SEX}, \code{REGION_GRP}, \code{SEASON}.
+#' @param aged_pred Aged observation data used to construct NAGE, with columns \code{YEAR}, \code{AGE_YRS},
+#'   optional \code{GEAR2}, \code{SEX}, \code{REGION_GRP}, \code{SEASON}, and optionally \code{N_AL} as counts.
+#' @param maxage Plus-group age. Ages > \code{maxage} are set to \code{maxage}.
+#' @param gear_mode "combined" to pool across gear, or "by_gear" to retain gear strata (requires \code{GEAR2}).
+#' @param sex_mode "combined" to pool across sex, or "split" to retain sex strata (requires \code{SEX}).
+#' @param seas Scalar Stock Synthesis \code{seas} value used only when \code{SEASON} is not present in inputs.
+#' @param GP Stock Synthesis \code{GP} header value.
+#' @param bseas Stock Synthesis \code{bseas} header value.
+#' @param fill_policy Filling policy for WTAGE when missing values occur. Currently supports
+#'   \code{"pooled_median"} and \code{"pooled_smooth"} (if implemented).
+#' @param internal_interp Logical; if TRUE, linearly interpolates internal gaps across ages within each row.
+#'
+#' @return A list with elements \code{WTAGE} and \code{NAGE} as wide tables. If \code{sex_mode="split"},
+#' returns a list with \code{$F} and \code{$M} sublists, each containing \code{WTAGE} and \code{NAGE}.
+#'
+#' @importFrom data.table as.data.table dcast setcolorder setnames setorder
 #' @export
 make_ss_wtage_nage <- function(out_long,
                                aged_pred,
@@ -91,12 +116,15 @@ make_ss_wtage_nage <- function(out_long,
     w
   }
 
-  add_headers <- function(d, fleet_vec, gender_vec) {
-    d[, `:=`(seas = as.integer(seas),
-             Fleet = as.integer(fleet_vec),
-             gender = as.integer(gender_vec),
-             GP = as.integer(GP),
-             bseas = as.integer(bseas))]
+  add_headers <- function(d, fleet_vec, gender_vec, seas_vec = NULL) {
+    if (is.null(seas_vec)) seas_vec <- as.integer(seas)
+    d[, `:=`(
+      seas   = seas_vec,
+      Fleet  = fleet_vec,              # allow character fleets intentionally
+      gender = as.integer(gender_vec),
+      GP     = as.integer(GP),
+      bseas  = as.integer(bseas)
+    )]
     d
   }
 
@@ -104,6 +132,8 @@ make_ss_wtage_nage <- function(out_long,
   by_keys <- c("YEAR")
   if (gear_mode == "by_gear") by_keys <- c(by_keys, "GEAR2")
   if (sex_mode  == "split")  by_keys <- c(by_keys, "SEX")
+  if("REGION_GRP" %in% names(W) && "REGION_GRP" %in% names(A)){ by_keys <- c(by_keys, "REGION_GRP")}
+  if("SEASON" %in% names(W) && "SEASON" %in% names(A)){ by_keys <- c(by_keys, "SEASON")}
 
   WT_wide <- wide_from_long(W[!is.na(WAA)], "WAA", by_keys)
 
@@ -118,16 +148,42 @@ make_ss_wtage_nage <- function(out_long,
   # ---- filling strategy: pooled reference curve by Fleet x gender ----
   # Create SS-style Fleet/gender fields first (but keep YEAR for pooling)
   prep_ss_block <- function(WT, NG) {
+
+    # seas_vec: use SEASON if present, else constant seas
+    seas_vec <- if ("SEASON" %in% names(WT)) as.integer(as.character(WT$SEASON)) else as.integer(seas)
+    if ("SEASON" %in% names(WT)) WT[, SEASON := NULL]
+    if ("SEASON" %in% names(NG)) NG[, SEASON := NULL]
+
+    # Fleet labeling
     if (gear_mode == "combined") {
-      fleet <- 1L
+
+      # if REGION_GRP present, keep it as Fleet label (or paste(REGION_GRP,1))
+      if ("REGION_GRP" %in% names(WT)) {
+        fleet <- as.character(WT$REGION_GRP)
+        WT[, REGION_GRP := NULL]
+        NG[, REGION_GRP := NULL]
+      } else {
+        fleet <- "1"
+      }
+
       if ("GEAR2" %in% names(WT)) WT[, GEAR2 := NULL]
       if ("GEAR2" %in% names(NG)) NG[, GEAR2 := NULL]
+
     } else {
-      fleet <- WT$GEAR2
+      # by_gear
+      if ("REGION_GRP" %in% names(WT)) {
+        fleet <- paste(as.character(WT$REGION_GRP), WT$GEAR2, sep = "_")
+        WT[, REGION_GRP := NULL]
+        NG[, REGION_GRP := NULL]
+      } else {
+        fleet <- as.character(WT$GEAR2)
+      }
+
       WT[, GEAR2 := NULL]
       NG[, GEAR2 := NULL]
     }
 
+    # Gender
     if (sex_mode == "combined") {
       gender <- 0L
       if ("SEX" %in% names(WT)) WT[, SEX := NULL]
@@ -138,23 +194,24 @@ make_ss_wtage_nage <- function(out_long,
       NG[, SEX := NULL]
     }
 
-    WT <- add_headers(WT, fleet_vec = fleet, gender_vec = gender)
-    NG <- add_headers(NG, fleet_vec = fleet, gender_vec = gender)
-    
+    WT <- add_headers(WT, fleet_vec = fleet, gender_vec = gender, seas_vec = seas_vec)
+    NG <- add_headers(NG, fleet_vec = fleet, gender_vec = gender, seas_vec = seas_vec)
+
     if ("YEAR" %in% names(WT) && !"#Yr" %in% names(WT)) {
-      data.table::setnames(WT, "YEAR", "#Yr", skip_absent=TRUE)
+      data.table::setnames(WT, "YEAR", "#Yr", skip_absent = TRUE)
     }
     if ("YEAR" %in% names(NG) && !"#Yr" %in% names(NG)) {
-      data.table::setnames(NG, "YEAR", "#Yr", skip_absent=TRUE)
+      data.table::setnames(NG, "YEAR", "#Yr", skip_absent = TRUE)
     }
-   
+
     header <- c("#Yr","seas","gender","Fleet","GP","bseas")
     data.table::setcolorder(WT, c(header, age_cols))
     data.table::setcolorder(NG, c(header, age_cols))
 
-    WT <- WT[order(`#Yr`, Fleet, gender)]
-    NG <- NG[order(`#Yr`, Fleet, gender)]
-    list(WT=WT, NG=NG)
+    WT <- WT[order(Fleet, seas, gender, `#Yr`)]
+    NG <- NG[order(Fleet, seas, gender, `#Yr`)]
+
+    list(WT = WT, NG = NG)
   }
 
 fill_block <- function(WT, NG) {
@@ -257,6 +314,21 @@ fill_block <- function(WT, NG) {
   build_out <- function(WT_w, NG_w) {
     blk <- prep_ss_block(WT_w, NG_w)
     WT_filled <- fill_block(blk$WT, blk$NG)
+  # enforce final ordering: Fleet -> seas -> gender -> #Yr
+    ord <- c("Fleet", "seas", "gender", "#Yr")
+    if (all(ord %in% names(WT_filled))) {
+      data.table::setorderv(WT_filled, ord)
+      } else {
+    # fallback (order by what exists)
+      data.table::setorderv(WT_filled, intersect(ord, names(WT_filled)))
+      }
+
+    if (all(ord %in% names(blk$NG))) {
+      data.table::setorderv(blk$NG, ord)
+    } else {
+      data.table::setorderv(blk$NG, intersect(ord, names(blk$NG)))
+    }
+
     print(WT_filled)                             ##cluge to get rid of bad behavior that I couldn't track down...
     out=list(WTAGE = WT_filled, NAGE = blk$NG)
     return(out)

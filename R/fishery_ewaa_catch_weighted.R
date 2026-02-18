@@ -37,7 +37,7 @@
 #' @param year_min Minimum fishery YEAR to include in biology pulls.
 #' @param catch_subarea Subarea code(s) passed to the blend catch query (character, e.g., "BS").
 #' @param catch_year_max Maximum year (inclusive) to include in blend catch.
-#' @param standard_quarter Logical. If TRUE, translate lengths to `target_qtr` using a delta-length
+#' @param standard_season Logical. If TRUE, translate lengths to `target_qtr` using a delta-length
 #'   growth model before applying the LW key. This yields a WTAGE that represents fish weights as-if
 #'   they were observed in the target quarter.
 #' @param target_qtr Integer 1..4. Target quarter used when `standard_quarter = TRUE`.
@@ -59,7 +59,8 @@ fishery_ewaa_catch_weighted <- function(
   con_akfin,
   species = 202,
   species_group = "PCOD",
-  region,
+  region_def,
+  season_def,
   len_bins,
   maxage = 12,
   gear_mode = c("combined", "by_gear"),
@@ -67,11 +68,12 @@ fishery_ewaa_catch_weighted <- function(
   trim_outliers = TRUE,
   trim_q = c(0.01, 0.99),
   min_strata_n = 1,
-  year_min = 2007,
+  start_year,
+  end_year,
   catch_subarea,
   catch_year_max,
-  standard_quarter = TRUE,
-  target_qtr = 4L
+  standard_season = TRUE,
+  target_season = "B"
 ) {
 
   gear_mode <- match.arg(gear_mode)
@@ -80,27 +82,44 @@ fishery_ewaa_catch_weighted <- function(
   # ---- 1) Pull fishery biological samples (age/length/weight) ----
   # get_fishery_age_wt_data() should return fish-level records with at least:
   # YEAR, MONTH/QUARTER, LENGTH, (AGE_YRS or AGE), WEIGHT, SEX, GEAR2, AREA, etc.
-  fish_raw <- get_fishery_age_wt_data(
-    con      = con_akfin,
-    species  = species,
-    region   = region,
-    year_min = year_min
-  )
+  #fish_raw <- get_fishery_age_wt_data(
+  #  con      = con_akfin,
+  #  species  = species,
+  #  region   = region,
+  #  year_min = year_min
+  #)
+
+  fish_raw <- get_fishery_age_wt_data(con=con_akfin,
+                                    species=species,
+                                    season_def=season_def,
+                                    region_def=region_def,
+                                    start_year = start_year,
+                                    end_year = end_year,
+                                    max_wt=50,
+                                    wgoa_cod=TRUE,
+                                    drop_unmapped=TRUE)
+
+
+
 
   # ---- 2) Pull quarterly blend catch and compute within-year quarter proportions ----
   # Blend catch typically contains total catch by YEAR x (MONTH or QUARTER) x GEAR x AREA.
   # get_blend_catch() should return a tidy table sufficient for build_catch_qtr_from_blend().
-  blend <- get_blend_catch(
-    con      = con_akfin,
-    species  = species_group,
-    subarea  = catch_subarea,
-    year_max = catch_year_max
-  )
+  blend <- get_blend_catch_region(con_akfin = con_akfin,
+                            species_group = species_group,
+                            region_def = region_def,
+                            season_def = season_def,
+                            start_year = start_year,
+                            end_year = end_year,
+                            wgoa_cod = TRUE)
 
-  # Convert blend catch to quarter totals and within-year proportions p_q.
-  # If gear_mode == "by_gear", build_catch_qtr_from_blend() should keep a GEAR2 column
+                           
+
+  # Convert blend catch to seasonal totals and within-year proportions p_q.
+  # If gear_mode == "by_gear", build_catch_season_from_blend() should keep a GEAR2 column
   # so later weighting can occur within gear.
-  catch_qtr <- build_catch_qtr_from_blend(
+  
+  catch_qtr <- build_catch_season_from_blend(
     blend   = blend,
     by_gear = (gear_mode == "by_gear")
   )
@@ -129,9 +148,9 @@ fishery_ewaa_catch_weighted <- function(
   #   so downstream LW predictions treat bin lengths as if they were in the target quarter.
   if (isTRUE(standard_quarter)) {
 
-    growth_fit <- fit_quarter_growth_model(
+    growth_fit <- fit_seasonal_growth_model(
       fish_al      = fish_raw,
-      target_qtr   = as.integer(target_qtr),
+      target_qtr   = as.integer(target_season),
       maxage       = as.integer(maxage),
       gear_mode    = gear_mode,
       sex_mode     = sex_mode,
@@ -139,7 +158,7 @@ fishery_ewaa_catch_weighted <- function(
       shrink_k     = 30
     )
 
-    al <- translate_lengths_to_quarter(
+    al <- translate_lengths_to_season(
       al_emp     = al,
       growth_fit = growth_fit,
       clamp      = TRUE,
@@ -164,9 +183,10 @@ fishery_ewaa_catch_weighted <- function(
                        trim_q = trim_q,
                        min_strata_n = min_strata_n,
                        allow_year = TRUE,
-                       allow_quarter = TRUE,
+                       allow_season = length(season_def)>1,
                        allow_gear = (gear_mode != "combined"),
-                       allow_area = TRUE,
+                       allow_region = (length(region_def) < 1 ),
+                       allow_area = (length(region_def)==1),
                        allow_sex = (sex_mode  != "combined"))
 
 
@@ -176,7 +196,7 @@ fishery_ewaa_catch_weighted <- function(
     lw_fit       = lw,
     gear_mode    = gear_mode,
     sex_mode     = sex_mode,
-    model_length = isTRUE(standard_quarter)  # if your apply_lw_to_al uses this flag
+    model_length = isTRUE(standard_season)  # if your apply_lw_to_al uses this flag
   )
 
   # Keep a copy suitable for downstream collapse
@@ -190,7 +210,7 @@ fishery_ewaa_catch_weighted <- function(
   #   annual_WAA(age) = sum_q [ p_q * WAA_q(age) ]
   out <- collapse_catch_weighted_wtaa(
     pred      = pred_like,
-    catch_qtr = catch_qtr,
+    catch_seas = catch_qtr,
     gear_mode = gear_mode,
     sex_mode  = sex_mode
   )

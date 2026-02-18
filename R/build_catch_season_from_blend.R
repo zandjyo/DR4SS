@@ -20,9 +20,9 @@
 #' - GEAR2 (int) if by_gear=TRUE
 #'
 #' @export
-build_catch_qtr_from_blend <- function(blend_catch,
-                                       by_gear = FALSE,
-                                        complete_grid = TRUE) {
+build_catch_season_from_blend <- function(blend_catch,
+                                         by_gear = TRUE,
+                                         complete_grid = TRUE) {
 
   if (!requireNamespace("data.table", quietly = TRUE)) {
     stop("Package 'data.table' is required.", call. = FALSE)
@@ -31,7 +31,7 @@ build_catch_qtr_from_blend <- function(blend_catch,
   dt <- data.table::as.data.table(blend_catch)
   names(dt) <- toupper(names(dt))
 
-  need <- c("YEAR", "MONTH_WED", "REGION_GRP", "TONS")
+  need <- c("YEAR","SEASON","REGION_GRP","TONS")
   miss <- setdiff(need, names(dt))
   if (length(miss) > 0) {
     stop("blend_catch missing required columns: ", paste(miss, collapse = ", "), call. = FALSE)
@@ -39,20 +39,13 @@ build_catch_qtr_from_blend <- function(blend_catch,
 
   suppressWarnings({
     dt[, YEAR  := as.integer(as.character(YEAR))]
-    dt[, MONTH := as.integer(as.character(MONTH_WED))]
     dt[, TONS  := as.numeric(TONS)]
   })
 
-  dt <- dt[!is.na(YEAR) & !is.na(MONTH) & MONTH %in% 1:12]
+  dt <- dt[!is.na(YEAR) & !is.na(SEASON)& !is.na(REGION_GRP)]
   dt <- dt[!is.na(TONS) & is.finite(TONS)]
 
-  dt[, QUARTER := data.table::fifelse(
-    MONTH <= 3, 1L,
-    data.table::fifelse(MONTH <= 6, 2L,
-      data.table::fifelse(MONTH <= 9, 3L, 4L)
-    )
-  )]
-
+  
   if (isTRUE(by_gear)) {
     if (!"GEAR" %in% names(dt)) {
       stop("by_gear=TRUE requires a GEAR column in blend_catch.", call. = FALSE)
@@ -65,9 +58,9 @@ build_catch_qtr_from_blend <- function(blend_catch,
 
   # Aggregate to quarter totals
   if (isTRUE(by_gear)) {
-    out <- dt[, .(CATCH = sum(TONS, na.rm = TRUE)), by = .(YEAR, QUARTER, REGION_GRP, GEAR2)]
+    out <- dt[, .(CATCH = sum(TONS, na.rm = TRUE)), by = .(YEAR, SEASON, REGION_GRP, GEAR2)]
   } else {
-    out <- dt[, .(CATCH = sum(TONS, na.rm = TRUE)), by = .(YEAR, QUARTER, REGION_GRP)]
+    out <- dt[, .(CATCH = sum(TONS, na.rm = TRUE)), by = .(YEAR, SEASON,REGION_GRP)]
   }
 
   # Optionally complete missing quarters (and gear2 combos)
@@ -75,19 +68,18 @@ build_catch_qtr_from_blend <- function(blend_catch,
     if (isTRUE(by_gear)) {
       grid <- data.table::CJ(
         YEAR = sort(unique(out$YEAR)),
-        QUARTER = 1:4,
-        REGION_GRP = sort(unique(out$REGION_GRP)),
+        SEASON = sort(unique(out$SEASON)),
+        REGION_GRP=sort(unique(out$REGION_GRP)),
         GEAR2 = sort(unique(out$GEAR2))
       )
-      out <- merge(grid, out, by = c("YEAR", "QUARTER", "REGION_GRP", "GEAR2"), all.x = TRUE)
+      out <- merge(grid, out, by = c("YEAR", "SEASON","REGION_GRP", "GEAR2"), all.x = TRUE)
     } else {
       grid <- data.table::CJ(
         YEAR = sort(unique(out$YEAR)),
-        QUARTER = 1:4,
-        REGION_GRP = sort(unique(out$REGION_GRP))
-
-      )
-      out <- merge(grid, out, by = c("YEAR", "QUARTER", "REGION_GRP"), all.x = TRUE)
+        SEASON = sort(unique(out$SEASON)),
+        REGION_GRP= sort(unique(out$REGION_GRP))
+        )
+      out <- merge(grid, out, by = c("YEAR","SEASON","REGION_GRP"), all.x = TRUE)
     }
     out[is.na(CATCH), CATCH := 0]
   }
@@ -102,9 +94,9 @@ build_catch_qtr_from_blend <- function(blend_catch,
     out[, p_q := {
       tot <- sum(CATCH, na.rm = TRUE)
       if (is.finite(tot) && tot > 0) CATCH / tot else rep(0, .N)
-    }, by = .(YEAR, REGION_GRP)]
+    }, by = .(YEAR,REGION_GRP)]
   }
 
-  data.table::setorder(out, REGION_GRP, YEAR, QUARTER)
+  data.table::setorder(out, REGION_GRP, YEAR, SEASON )
   out
 }

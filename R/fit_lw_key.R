@@ -4,7 +4,7 @@
 #' @param trim_outliers logical; if TRUE, trim extreme weights using qgam envelope on s(LENGTH)
 #' @param trim_q length-2 quantiles for trimming
 #' @param min_strata_n minimum N per stratum cell before retaining a factor term
-#' @param allow_year,allow_quarter,allow_gear,allow_area,allow_sex include those factor terms if supported
+#' @param allow_year,allow_quarter,allow_gear,allow_region,allow_area,allow_sex include those factor terms if supported
 #'
 #' @return list(model=mgcv::gam, kept_terms=character, data_used=data.table)
 #' @export
@@ -13,9 +13,10 @@ fit_lw_key <- function(fish_data,
                        trim_q = c(0.01, 0.99),
                        min_strata_n = 1,
                        allow_year = TRUE,
-                       allow_quarter = TRUE,
+                       allow_season = TRUE,
                        allow_gear = TRUE,
-                       allow_area = TRUE,
+                       allow_region= TRUE,
+                       allow_area = FALSE,
                        allow_sex = TRUE) {
 
   if (!requireNamespace("data.table", quietly = TRUE)) stop("Need data.table.", call. = FALSE)
@@ -54,9 +55,10 @@ fit_lw_key <- function(fish_data,
   # choose candidate factor terms
   candidates <- character()
   if (allow_year    && "YEAR"    %in% names(dt)) candidates <- c(candidates, "YEAR")
-  if (allow_quarter && "QUARTER" %in% names(dt)) candidates <- c(candidates, "QUARTER")
+  if (allow_season  && "SEASON" %in% names(dt) && length(unique(dt$SEASON)) > 1 ) candidates <- c(candidates, "SEASON")
+  if (allow_region  && "REGION_GRP" %in% names(dt) && length(unique(dt$REGION_GRP)) > 1 ) candidates <- c(candidates, "REGION_GRP")
   if (allow_gear    && "GEAR2"   %in% names(dt)) candidates <- c(candidates, "GEAR2")
-  if (allow_area    && "AREA"    %in% names(dt)) candidates <- c(candidates, "AREA")
+  if (allow_area    && "AREA"    %in% names(dt)&& length(unique(dt$AREA)) > 1 ) candidates <- c(candidates, "AREA")
   if (allow_sex     && "SEX"     %in% names(dt)) candidates <- c(candidates, "SEX")
 
   # force factors
@@ -68,8 +70,8 @@ fit_lw_key <- function(fish_data,
     all(tmp$N >= min_n)
   }
 
-  # drop order: gear -> area -> quarter -> sex -> year (year last)
-  drop_order <- c("GEAR2","AREA","QUARTER","SEX","YEAR")
+  # drop order: gear -> region -> area -> quarter -> sex -> year (year last)
+  drop_order <- c("GEAR2","REGION_GRP","AREA","SEASON","SEX","YEAR")
   kept <- intersect(drop_order, candidates)
 
   while (length(kept) > 0 && !strata_ok(dt, kept, min_strata_n)) {
