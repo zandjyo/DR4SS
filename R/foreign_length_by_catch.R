@@ -22,8 +22,8 @@
 #'         }
 #'   \item Produces normalized compositions \code{FREQ} on a dense 1:maxL grid for:
 #'         \itemize{
-#'           \item aggregated (by REGION_GRP x YEAR [x SEASON] [x SEX])
-#'           \item by-gear (by REGION_GRP x YEAR x GEAR [x SEASON] [x SEX])
+#'           \item aggregated (by REGION_GRP x YEAR x SEASON x SEX)
+#'           \item by-gear (by REGION_GRP x YEAR x GEAR x SEASON x SEX)
 #'         }
 #' }
 #'

@@ -53,7 +53,7 @@ GET_SURV_AGE<- function(con_akfin,
 
   # ---- query using packaged SQL template ----
 
-  sql <- sql_reader("survey_age.sql")
+  sql <- sql_reader("survey_age2.sql")
   sql <- sql_filter(sql_precode = ">=", x = start_yr, sql_code = sql,
                     flag = "-- insert start_year", value_type = "numeric")
   sql <- sql_filter(sql_precode = "IN", x = species,  sql_code = sql,

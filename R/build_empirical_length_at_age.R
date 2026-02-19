@@ -22,7 +22,7 @@ build_empirical_length_at_age <- function(fish_data,
 
   gear_mode <- match.arg(gear_mode)
   sex_mode  <- match.arg(sex_mode)
-  area_region  <- match.arg(area_region)
+  #area_region  <- match.arg(area_region)
 
   dt <- data.table::as.data.table(fish_data)
   names(dt) <- toupper(names(dt))
@@ -54,14 +54,12 @@ build_empirical_length_at_age <- function(fish_data,
 
   if (area_region == "region") {
     if ("AREA" %in% names(al)) al[, AREA := NULL]
-  } else {
     if (!"REGION_GRP" %in% names(al)) stop("area_region='region' requires REGION_GRP.", call. = FALSE)
     }
-
-  if (area_region == "area") {
-    if ("REGION_GRP" %in% names(al)) al[, REGION_GRP := NULL]
-  } else {
-    if (!"AREA" %in% names(al)) stop("area_region='area' requires AREA.", call. = FALSE)
+    
+  if(area_region=="area"){
+    if ("REGION_GRP" %in% names(al)){ al[, REGION_GRP := NULL]}
+    if (!"AREA" %in% names(al)){ stop("area_region='area' requires AREA.", call. = FALSE)}
     }
 
   # --- length binning with clamping and within-bin mean length ---

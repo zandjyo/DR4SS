@@ -8,7 +8,8 @@ fishery_ewaa_catch_weighted(
   con_akfin,
   species = 202,
   species_group = "PCOD",
-  region,
+  region_def,
+  season_def,
   len_bins,
   maxage = 12,
   gear_mode = c("combined", "by_gear"),
@@ -16,11 +17,12 @@ fishery_ewaa_catch_weighted(
   trim_outliers = TRUE,
   trim_q = c(0.01, 0.99),
   min_strata_n = 1,
-  year_min = 2007,
+  start_year,
+  end_year,
   catch_subarea,
   catch_year_max,
-  standard_quarter = TRUE,
-  target_qtr = 4L
+  standard_season = TRUE,
+  target_season = "B"
 )
 }
 \arguments{
@@ -31,8 +33,6 @@ and fishery biological tables queried by the helper functions).}
 
 \item{species_group}{Character species code used by the blend catch query
 (e.g., "PCOD" if blend catch uses a group label rather than numeric code).}
-
-\item{region}{Region selector passed to \code{get_fishery_age_wt_data()} (e.g., "BS", "GOA", etc.).}
 
 \item{len_bins}{Numeric vector of length bin edges used to build the empirical length-at-age.}
 
@@ -48,15 +48,17 @@ and fishery biological tables queried by the helper functions).}
 
 \item{min_strata_n}{Minimum sample size required to retain a model stratum when fitting (e.g., by gear/area/quarter).}
 
-\item{year_min}{Minimum fishery YEAR to include in biology pulls.}
-
 \item{catch_subarea}{Subarea code(s) passed to the blend catch query (character, e.g., "BS").}
 
 \item{catch_year_max}{Maximum year (inclusive) to include in blend catch.}
 
-\item{standard_quarter}{Logical. If TRUE, translate lengths to \code{target_qtr} using a delta-length
+\item{standard_season}{Logical. If TRUE, translate lengths to \code{target_qtr} using a delta-length
 growth model before applying the LW key. This yields a WTAGE that represents fish weights as-if
 they were observed in the target quarter.}
+
+\item{region}{Region selector passed to \code{get_fishery_age_wt_data()} (e.g., "BS", "GOA", etc.).}
+
+\item{year_min}{Minimum fishery YEAR to include in biology pulls.}
 
 \item{target_qtr}{Integer 1..4. Target quarter used when \code{standard_quarter = TRUE}.}
 }

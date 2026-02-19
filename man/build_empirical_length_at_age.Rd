@@ -8,6 +8,7 @@ build_empirical_length_at_age(
   fish_data,
   len_bins,
   maxage = 10,
+  area_region = c("region", "area"),
   gear_mode = c("combined", "by_gear"),
   sex_mode = c("combined", "split"),
   min_strata_n = 1
@@ -20,11 +21,13 @@ build_empirical_length_at_age(
 
 \item{maxage}{plus group age}
 
+\item{area_region}{"regtion" or "area'}
+
 \item{gear_mode}{"combined" or "by_gear"}
 
 \item{sex_mode}{"combined" or "split"}
 
-\item{min_strata_n}{minimum N within each (YEAR,QUARTER,AGE,...) required; else strata dropped later if you want}
+\item{min_strata_n}{minimum N within each (YEAR,SEASON,AGE,...) required; else strata dropped later if you want}
 }
 \value{
 data.table with YEAR, QUARTER, AGE_YRS, (GEAR2), (SEX), BIN, N, P_LEN

@@ -8,7 +8,7 @@
 #'   Must include YEAR, AGE_YRS, QUARTER, BIN_ID, L_BAR, P_LEN, N.
 #'   Optionally includes GEAR2 and/or SEX depending on the model.
 #' @param growth_fit Output list from fit_quarter_growth_model().
-#' @param clamp Logical; if TRUE, clamp translated lengths to [min_L, max_L].
+#' @param clamp Logical; if TRUE, clamp translated lengths to min_L, max_L.
 #' @param min_L,max_L Optional numeric bounds for clamping. If NULL, taken from L_BAR range.
 #'
 #' @return al_emp with added columns:

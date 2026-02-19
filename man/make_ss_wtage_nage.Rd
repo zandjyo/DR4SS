@@ -2,7 +2,8 @@
 % Please edit documentation in R/make_ss_wtage_nage.R
 \name{make_ss_wtage_nage}
 \alias{make_ss_wtage_nage}
-\title{Make SS WTAGE and NAGE with safe filling for missing ages}
+\title{Make SS WTAGE and NAGE with safe filling for missing ages
+Build Stock Synthesis WTAGE and NAGE blocks from long WAA output}
 \usage{
 make_ss_wtage_nage(
   out_long,
@@ -18,27 +19,51 @@ make_ss_wtage_nage(
 )
 }
 \arguments{
-\item{out_long}{Long WAA output (YEAR, AGE_YRS, WAA, plus optional GEAR2/SEX).}
+\item{out_long}{Long-format WAA output with columns \code{YEAR}, \code{AGE_YRS}, \code{WAA}, and optionally
+\code{GEAR2}, \code{SEX}, \code{REGION_GRP}, \code{SEASON}.}
 
-\item{aged_pred}{Row-level aged data to build NAGE (YEAR, AGE_YRS, optional GEAR2/SEX).}
+\item{aged_pred}{Aged observation data used to construct NAGE, with columns \code{YEAR}, \code{AGE_YRS},
+optional \code{GEAR2}, \code{SEX}, \code{REGION_GRP}, \code{SEASON}, and optionally \code{N_AL} as counts.}
 
-\item{maxage}{Plus-group age.}
+\item{maxage}{Plus-group age. Ages > \code{maxage} are set to \code{maxage}.}
 
-\item{gear_mode}{"combined" or "by_gear".}
+\item{gear_mode}{"combined" to pool across gear, or "by_gear" to retain gear strata (requires \code{GEAR2}).}
 
-\item{sex_mode}{"combined" or "split".}
+\item{sex_mode}{"combined" to pool across sex, or "split" to retain sex strata (requires \code{SEX}).}
 
-\item{seas, GP, bseas}{SS header values.}
+\item{seas}{Scalar Stock Synthesis \code{seas} value used only when \code{SEASON} is not present in inputs.}
 
-\item{fill_policy}{One of c("pooled_median","pooled_smooth"). Default pooled_median.}
+\item{GP}{Stock Synthesis \code{GP} header value.}
 
-\item{internal_interp}{Logical; if TRUE, linearly interpolate internal gaps within-year.}
+\item{bseas}{Stock Synthesis \code{bseas} header value.}
+
+\item{fill_policy}{Filling policy for WTAGE when missing values occur. Currently supports
+\code{"pooled_median"} and \code{"pooled_smooth"} (if implemented).}
+
+\item{internal_interp}{Logical; if TRUE, linearly interpolates internal gaps across ages within each row.}
 }
 \value{
-WTAGE/NAGE lists (split by sex if requested)
+A list with elements \code{WTAGE} and \code{NAGE} as wide tables. If \code{sex_mode="split"},
+returns a list with \code{$F} and \code{$M} sublists, each containing \code{WTAGE} and \code{NAGE}.
 }
 \description{
-Fills missing WTAGE cells (where NAGE==0 or WTAGE is NA) using a pooled
-reference curve by Fleet x gender, then optionally smooths internal gaps.
-Ensures all a0..amax are filled for Stock Synthesis.
+Converts long-format weight-at-age (WAA) estimates and aged-data counts into
+Stock Synthesis-style wide WTAGE and NAGE tables (a0..aMax). Supports optional
+stratification by gear and sex, and when present in the inputs, can additionally
+stratify by \code{REGION_GRP} and \code{SEASON}.
+}
+\details{
+\itemize{
+\item WTAGE is constructed by pivoting \code{out_long} to wide age columns (a0..aMax).
+\item NAGE is constructed from \code{aged_pred} as counts-at-age (either \code{sum(N_AL)} if present,
+otherwise row counts).
+\item Missing WTAGE cells (or ages with NAGE==0) are filled using a pooled reference curve
+(median across years by Fleet x gender), with optional internal interpolation across ages.
+}
+
+If \code{SEASON} exists in both inputs, it is written into the Stock Synthesis \code{seas} column
+(overriding the scalar \code{seas} argument). If \code{REGION_GRP} exists and \code{gear_mode="by_gear"},
+the \code{Fleet} column is set to \code{paste(REGION_GRP, GEAR2, sep="_")}. These Fleet labels may not be
+Stock Synthesis compliant; they are intended as intermediate identifiers that can be remapped by the
+assessment author after defining fleets/seasons.
 }

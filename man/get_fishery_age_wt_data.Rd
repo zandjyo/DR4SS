@@ -2,38 +2,74 @@
 % Please edit documentation in R/get_fishery_age_wt_data.R
 \name{get_fishery_age_wt_data}
 \alias{get_fishery_age_wt_data}
-\title{Pull and standardize fishery age–length–weight data}
+\title{Pull and prepare fishery age–length–weight observations for composition building}
 \usage{
-get_fishery_age_wt_data(con, species, region, year_min = 2007)
+get_fishery_age_wt_data(
+  con,
+  species,
+  season_def,
+  region_def,
+  start_year = 2007,
+  end_year = 2025,
+  max_wt = 50,
+  wgoa_cod = TRUE,
+  drop_unmapped = TRUE
+)
 }
 \arguments{
-\item{con}{A DBI connection to the AKFIN database.}
+\item{con}{A live DBI connection to AKFIN (or equivalent) used by \code{sql_run()}.}
 
-\item{species}{Fishery species code used in dom_age_wt2.sql (e.g., 202).}
+\item{species}{Species identifier inserted into the SQL query (typically a numeric code).}
 
-\item{region}{Either a character region code
-("AI","BS","GOA","BSWGOA") or a numeric vector of NMFS areas.}
+\item{season_def}{Named list mapping season labels to months, e.g. \code{list(A = 1:4, B = 5:12)}.}
 
-\item{year_min}{Minimum YEAR to retain (default 2007).}
+\item{region_def}{Named list mapping region labels to NMFS area codes. Area codes must be unique
+across regions (non-overlapping).}
+
+\item{start_year, end_year}{Inclusive year range to retain after the SQL pull.}
+
+\item{max_wt}{Maximum plausible individual weight. Weights of 0 or > \code{max_wt} are set to \code{NA}.}
+
+\item{wgoa_cod}{Logical; if \code{TRUE}, applies a WGOA recode for NMFS area 620 to 610 based on longitude
+(requires longitude field present in the SQL output).}
+
+\item{drop_unmapped}{Logical; if \code{TRUE}, rows whose \code{NMFS_AREA} does not map into \code{region_def}
+are removed.}
 }
 \value{
-A data.table with standardized columns:
-\describe{
-\item{YEAR}{Integer year}
-\item{MONTH}{Integer month (1–12)}
-\item{QUARTER}{Integer quarter (1–4)}
-\item{AGE}{Observed age (integer)}
-\item{LENGTH}{Length (cm)}
-\item{WEIGHT}{Weight (kg; NA for invalid/zero)}
-\item{SEX}{Character "F" or "M"}
-\item{GEAR}{Original gear code}
-\item{GEAR2}{Gear group (1 = other/trawl, 2 = HAL, 3 = POT)}
-\item{AREA}{Derived NMFS reporting area (factor)}
-}
+A \code{data.table} of fishery observations including standardized fields and derived columns
+(e.g., \code{SEASON}, \code{REGION_GRP}, \code{QUARTER}, \code{AREA}, \code{GEAR2}, \code{GEAR3}).
+The table is ordered by \code{YEAR, MONTH}.
 }
 \description{
-Reads fishery age/length/weight observations using the
-\code{dom_age_wt2.sql} query bundled with DR4SS, applies region filters,
-standardizes fields (YEAR, QUARTER, SEX, GEAR2), and performs basic
-cleaning suitable for downstream EWAA modeling.
+Queries fishery biological observations (age, length, weight, sex, gear, and area)
+from AKFIN (or equivalent) via a packaged SQL template, then standardizes fields and
+derives commonly used stratification variables (season, region group, quarter, area, gear groups).
+}
+\details{
+This function:
+\enumerate{
+\item Reads the SQL template \code{dom_age_wt2.sql} using \code{sql_reader()} and inserts
+\code{species} and the requested \code{region_def} area codes using \code{sql_filter()}.
+\item Executes the query with \code{sql_run()} and enforces required columns.
+\item Filters to \code{start_year:end_year}, valid months (1--12), and non-missing lengths.
+\item Optionally remaps selected WGOA NMFS areas to WGOA (\code{610}) based on longitude
+when \code{wgoa_cod = TRUE}.
+\item Assigns a user-defined \code{SEASON} factor from \code{season_def} (months not mapped
+yield \code{SEASON = NA} and may be dropped downstream).
+\item Assigns \code{REGION_GRP} based on \code{region_def} and optionally drops unmapped rows.
+\item Cleans weights by setting \code{WEIGHT} to \code{NA} when \code{WEIGHT == 0} or
+\code{WEIGHT > max_wt}.
+\item Derives additional fields:
+\itemize{
+\item \code{AREA}: coarse area factor derived from \code{NMFS_AREA} (with 50 -> 51 adjustment)
+\item \code{QUARTER}: 1--4 from \code{MONTH}
+\item \code{SEX}: standardized to \code{"F"} or \code{"M"} (other values dropped)
+\item \code{GEAR2}: numeric gear grouping (default 1; 8 -> 2; 6 -> 3)
+\item \code{GEAR3}: character gear grouping (\code{"TRW"}, \code{"HAL"}, \code{"POT"})
+}
+}
+}
+\seealso{
+\code{sql_reader}, \code{sql_filter}, \code{sql_run}
 }

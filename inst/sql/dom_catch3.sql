@@ -1,0 +1,36 @@
+SELECT 
+    akr.species_translation.to_code AS SPECIES,
+    SUM(COUNCIL.COMPREHENSIVE_BLEND_CA.WEIGHT_POSTED)AS TONS,
+    to_char(COUNCIL.COMPREHENSIVE_BLEND_CA.WEEK_END_DATE,'MM') AS MONTH_WED,
+    COUNCIL.COMPREHENSIVE_BLEND_CA.FMP_GEAR AS GEAR, 
+    COUNCIL.COMPREHENSIVE_BLEND_CA.YEAR AS YEAR, 
+    COUNCIL.COMPREHENSIVE_BLEND_CA.REPORTING_AREA_CODE AS AREA,
+    COUNCIL.COMPREHENSIVE_BLEND_CA.ADFG_STAT_AREA_CODE AS ADFG_AREA,
+    'DOMESTIC' AS SOURCE 
+FROM
+         akr.species_translation
+    INNER JOIN council.comprehensive_blend_ca ON akr.species_translation.from_code = council.comprehensive_blend_ca.agency_species_code
+WHERE
+        akr.species_translation.from_agency = 'AKR'
+    AND akr.species_translation.to_agency = 'OBS'
+    AND akr.species_translation.to_code 
+      -- insert species
+    AND  COUNCIL.COMPREHENSIVE_BLEND_CA.REPORTING_AREA_CODE
+      -- insert area 
+    AND COUNCIL.COMPREHENSIVE_BLEND_CA.YEAR 
+       -- insert eyears
+    AND COUNCIL.COMPREHENSIVE_BLEND_CA.YEAR 
+       -- insert syears
+GROUP BY 
+      akr.species_translation.to_code,
+      COUNCIL.COMPREHENSIVE_BLEND_CA.YEAR,
+      to_char(COUNCIL.COMPREHENSIVE_BLEND_CA.WEEK_END_DATE,'MM'), 
+      COUNCIL.COMPREHENSIVE_BLEND_CA.REPORTING_AREA_CODE,
+      COUNCIL.COMPREHENSIVE_BLEND_CA.FMP_GEAR,
+      COUNCIL.COMPREHENSIVE_BLEND_CA.ADFG_STAT_AREA_CODE
+ORDER BY
+      akr.species_translation.to_code,
+      COUNCIL.COMPREHENSIVE_BLEND_CA.YEAR,
+      to_char(COUNCIL.COMPREHENSIVE_BLEND_CA.WEEK_END_DATE,'MM'), 
+      COUNCIL.COMPREHENSIVE_BLEND_CA.REPORTING_AREA_CODE,
+      COUNCIL.COMPREHENSIVE_BLEND_CA.FMP_GEAR

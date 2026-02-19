@@ -22,7 +22,7 @@ apply_lw_to_al(
 \item{sex_mode}{"combined" or "split"}
 }
 \value{
-data.table with YEAR, QUARTER, AGE_YRS, (GEAR2), (SEX), WAA, N_AL
+data.table with YEAR, REGION_GRP,SEASON, AGE_YRS, (GEAR2), (SEX), WAA, N_AL
 }
 \description{
 Apply a length–weight key to empirical length-at-age to get quarter WAA

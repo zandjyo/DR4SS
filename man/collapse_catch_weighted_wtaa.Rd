@@ -2,11 +2,11 @@
 % Please edit documentation in R/collapse_catch_weighted_wtaa.R
 \name{collapse_catch_weighted_wtaa}
 \alias{collapse_catch_weighted_wtaa}
-\title{Collapse quarter-specific predicted weights-at-age to annual catch-weighted WAA}
+\title{Collapse season-specific predicted weights-at-age to annual catch-weighted WAA}
 \usage{
 collapse_catch_weighted_wtaa(
   pred,
-  catch_qtr,
+  catch_seas,
   gear_mode = c("combined", "by_gear"),
   sex_mode = c("combined", "split"),
   renormalize = TRUE,
@@ -14,47 +14,59 @@ collapse_catch_weighted_wtaa(
 )
 }
 \arguments{
-\item{pred}{data.table/data.frame from \code{predict_weights_for_aged()} with columns
-YEAR, QUARTER, AGE_YRS, WEIGHT_KG, and optionally SEX, GEAR2.}
+\item{pred}{A \code{data.table} or \code{data.frame} from \code{predict_weights_for_aged()}
+with columns \code{YEAR}, \code{SEASON}, \code{AGE_YRS}, \code{WEIGHT_KG}, and optionally
+\code{SEX}, \code{GEAR2}, \code{REGION_GRP}.}
 
-\item{catch_qtr}{data.table/data.frame from \code{build_catch_qtr_from_blend()} with columns
-YEAR, QUARTER, p_q and optionally GEAR2 (if catch weights are gear-specific).}
+\item{catch_seas}{A \code{data.table} or \code{data.frame} from \code{build_catch_qtr_from_blend()}
+(seasonal/quarterly catch proportions) with columns \code{YEAR}, \code{SEASON}, \code{P_Q},
+and optionally \code{GEAR2} and/or \code{REGION_GRP}.}
 
-\item{gear_mode}{Character: "combined" or "by_gear".}
+\item{gear_mode}{Character; either \code{"combined"} (default) to pool across gear, or
+\code{"by_gear"} to retain gear-specific output (requires \code{GEAR2} in \code{pred}).}
 
-\item{sex_mode}{Character: "combined" or "split".}
+\item{sex_mode}{Character; either \code{"combined"} (default) to pool across sex, or
+\code{"split"} to retain sex-specific output (requires \code{SEX} in \code{pred}).}
 
-\item{renormalize}{Logical. If TRUE (default), renormalize p_q within each
-(YEAR, AGE, GEAR2, SEX) over quarters that have non-missing means.}
+\item{renormalize}{Logical; if TRUE (default), renormalize \code{P_Q} within each group over
+seasons with available means; if FALSE, do not renormalize.}
 
-\item{require_catch_years}{Logical. If TRUE (default), error if any YEAR in \code{pred}
-is missing from \code{catch_qtr}. If FALSE, missing years get p_q = 0.}
+\item{require_catch_years}{Logical; if TRUE (default), error if any \code{YEAR} in \code{pred}
+is missing from \code{catch_seas}. If FALSE, missing years receive \code{P_Q = 0}.}
 }
 \value{
-A data.table with columns:
+A \code{data.table} with columns:
 \describe{
 \item{YEAR}{Integer year}
-\item{AGE_YRS}{Integer age (plus-grouped already in \code{pred})}
-\item{GEAR2}{Integer gear group if gear_mode="by_gear", otherwise absent}
-\item{SEX}{"F"/"M" if sex_mode="split", otherwise absent}
+\item{AGE_YRS}{Integer age (plus-grouping should already be applied in \code{pred})}
+\item{GEAR2}{Integer gear group if \code{gear_mode = "by_gear"}, otherwise omitted}
+\item{SEX}{\code{"F"} or \code{"M"} if \code{sex_mode = "split"}, otherwise omitted}
+\item{REGION_GRP}{Region label if present in both inputs, otherwise omitted}
 \item{WAA}{Catch-weighted annual mean weight-at-age}
-\item{N_AGED}{Number of aged observations contributing across all quarters}
-\item{P_SUM}{Sum of p_q used in the collapse (after filtering/renormalization)}
+\item{N_AGED}{Number of aged observations contributing across all seasons}
+\item{P_SUM}{Sum of \code{P_Q} over seasons included in the collapse (pre-renormalization)}
 }
 }
 \description{
-Computes quarter-specific mean predicted weight-at-age from aged observations and
-collapses to an annual mean weight-at-age using quarterly catch proportions from
-blend catch. Supports output by gear (GEAR2) and/or sex (SEX) or combined.
-
-Catch-weighted annual mean for a given grouping is:
-\deqn{w_{y,a} = \sum_q p_{y,q} \mu_{y,a,q}}
-where \eqn{\mu_{y,a,q}} is the mean predicted weight in quarter q and
-\eqn{p_{y,q}} is the catch proportion in that quarter (from blend catch).
-
-If some quarters have no observations for a given year-age-group, you can either:
-\itemize{
-\item renormalize p_q over available quarters (default), or
-\item treat missing quarters as contributing nothing (renormalize = FALSE).
+Computes season-specific mean predicted weight-at-age from aged observations and
+collapses to an annual mean weight-at-age using seasonal catch proportions from
+blend catch. Supports output combined or split by gear (\code{GEAR2}) and/or sex (\code{SEX}),
+and optionally by region (\code{REGION_GRP}) when present in both inputs.
 }
+\details{
+For a given grouping (e.g., year-age, optionally gear/sex/region), the catch-weighted
+annual mean is:
+\deqn{w_{y,a} = \sum_s p_{y,s} \mu_{y,a,s}}
+where \eqn{\mu_{y,a,s}} is the mean predicted weight in season \eqn{s} and
+\eqn{p_{y,s}} is the catch proportion in that season (from blend catch).
+
+If some seasons have no observations for a given year-age-group, you can either:
+\itemize{
+\item renormalize \eqn{p_{y,s}} over seasons with available means (\code{renormalize = TRUE}, default), or
+\item treat missing seasons as contributing zero (\code{renormalize = FALSE}).
+}
+
+Catch weights (\code{P_Q}) may be gear-specific (include \code{GEAR2} in \code{catch_seas})
+or overall (no \code{GEAR2} column), in which case the same seasonal proportions are applied
+to all gears in \code{pred}.
 }

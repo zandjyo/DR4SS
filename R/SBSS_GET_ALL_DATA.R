@@ -8,8 +8,8 @@
 #' - Catch is built via [build_fishery_catch_ss()] (no inline SQL in the wrapper).
 #' - Longline RPN CPUE is built via [build_ll_cpue()] and **fleet number is user-specified**
 #'   (no `ONE_FLEET` logic to toggle index 3 vs 5).
-#' - Fishery EWAA is built via [fishery_ewaa()] (optionally split by sex).
-#' - Fishery catch-weighted lcomp is built via [LENGTH_BY_CATCH_short()].
+#' - Fishery EWAA is built via (optionally split by sex).
+#' - Fishery catch-weighted lcomp is built via .
 #'
 #' @param con_akfin DBI connection to AKFIN (required).
 #' @param con_afsc  DBI connection to AFSC (required for some survey/fishery helpers).
@@ -38,15 +38,15 @@
 #' @param len_bins Length bins for survey length comps.
 #' @param max_age Plus-group age for age comps and fishery EWAA outputs.
 #'
-#' @param do_fsh_ewaa Logical; if TRUE run [fishery_ewaa()].
-#' @param fsh_ewaa_split_sex Logical; if TRUE, fishery EWAA fits/predicts split by sex and
+#' @param do_fsh_ewaa Logical; if TRUE run fishery_ewaa().
+#' @param fsh_ewaa_split_sex Logical; if TRUE, fishery_ewaa_catch_weighted() fits/predicts split by sex and
 #'   outputs F/M tables.
 #'
-#' @param do_fsh_lcomp Logical; if TRUE run [LENGTH_BY_CATCH_short()].
-#' @param fsh_lcomp_sex Logical; passed to LENGTH_BY_CATCH_short(SEX=...).
-#' @param fsh_lcomp_port Logical; passed to LENGTH_BY_CATCH_short(PORT=...).
+#' @param do_fsh_lcomp Logical; if TRUE run LENGTH_BY_CATCH().
+#' @param fsh_lcomp_sex Logical; passed to LENGTH_BY_CATCH(SEX=...).
+#' @param fsh_lcomp_port Logical; passed to LENGTH_BY_CATCH(PORT=...).
 #' @param fsh_species_catch Species code used by fishery catch/length SQL (can differ from survey).
-#' @param for_species_catch Optional “foreign catch species” code used by LENGTH_BY_CATCH_short.
+#' @param for_species_catch Optional “foreign catch species” code used by LENGTH_BY_CATCH.
 #'
 #' @return Named list of SS inputs (and intermediate objects) suitable for writing into a
 #' .dat file pipeline.

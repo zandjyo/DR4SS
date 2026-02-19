@@ -22,10 +22,10 @@
 #' Workflow:
 #' 1) Pull observer length-frequency + species composition expansions (AKFIN).
 #' 2) Optionally pull port length-frequency across eras:
-#'    - 1990–1998 (AFSC)
-#'    - 1999–2007 (AFSC lengths + AKFIN fish tickets; uses fuzzy matching)
-#'    - 2008–2010 (AFSC lengths + fuzzy matching to fish tickets)
-#'    - 2011–present (AFSC; direct landings fields)
+#'    - 1990–1998 (AKFIN)
+#'    - 1999–2007 (AKFIN lengths + AKFIN fish tickets; uses fuzzy matching)
+#'    - 2008–2010 (AKFIN lengths + fuzzy matching to fish tickets)
+#'    - 2011–present (AKFIN; direct landings fields)
 #'    The `fuzzy_dates()` steps are retained because they are required to recover
 #'    port samples that do not join to fish tickets by ID.
 #' 3) Optionally filter ALL_DATA by `max_length` (removes LENGTH > max_length).
@@ -36,10 +36,7 @@
 #'    and/or user-defined region group).
 #'
 #' @param con_akfin DBI connection to AKFIN.
-#' @param con_afsc DBI connection to AFSC.
 #' @param species Numeric observer species code used in observer/port length SQL.
-#' @param species_catch Catch accounting species identifier used in blend catch SQL.
-#' @param species_srv RACE species code used in survey age pull (GET_SURV_AGE).
 #' @param sp_area Stock assessment area code: "BS","AI","GOA","BSWGOA".
 #'   Used for default region filtering (if `region_def` is NULL) and passed to
 #'   age-predictor helper functions.
@@ -73,10 +70,7 @@
 #'
 #' @export
 LENGTH_AGE_BY_CATCH <- function(con_akfin,
-                                con_afsc,
                                 species,
-                                species_catch,
-                                species_srv,
                                 sp_area,
                                 start_year,
                                 end_year,
@@ -90,14 +84,12 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
                                 verbose = TRUE,
                                 seed = 1L,
                                 season_def = NULL,
-                                season_month = c("MONTH","MONTH_WED"),
                                 region_def = NULL,
                                 drop_unmapped = TRUE,
                                 wgoa_cod =TRUE) {
 
   age_length <- match.arg(age_length)
   map_sample <- match.arg(map_sample)
-  season_month <- match.arg(season_month)
 
   # ---- deps ----
   if (!requireNamespace("data.table", quietly = TRUE)) stop("data.table required.", call. = FALSE)
@@ -107,10 +99,8 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
 
   # ---- basic checks ----
   if (is.null(con_akfin)) stop("`con_akfin` is required.", call. = FALSE)
-  if (is.null(con_afsc))  stop("`con_afsc` is required.", call. = FALSE)
-
+  
   if (!is.numeric(species) || length(species) != 1L) stop("`species` must be a single numeric code.", call. = FALSE)
-  if (length(species_catch) != 1L) stop("`species_catch` must be length 1.", call. = FALSE)
   if (!is.numeric(start_year) || length(start_year) != 1L) stop("`start_year` must be a single year.", call. = FALSE)
   if (start_year < 1990) stop("`start_year` must be >= 1990.", call. = FALSE)
   if (!is.numeric(end_year) || length(end_year) != 1L) stop("`end_year` must be a single year.", call. = FALSE)
@@ -300,7 +290,7 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
   Dspcomp[AREA2 == 500, AREA2 := 510]
 
   OBS_DATA <- Dspcomp[, .(SPECIES, YEAR, GEAR, AREA2, AREA, MONTH, QUARTER, MONTH_WED,
-                          CRUISE, VES_AKR_ADFG, HAUL_JOIN, SEX, LENGTH,
+                          CRUISE, PERMIT, VES_AKR_ADFG, HAUL_JOIN, SEX, LENGTH,
                           SUM_FREQUENCY, EXTRAPOLATED_WEIGHT, NUMB, SOURCE)]
   OBS_DATA <- OBS_DATA[YEAR >= start_year & YEAR <= end_year]
   OBS_DATA <- add_region_group(OBS_DATA, region_def = region_def, area_col = "AREA", drop_unmapped = drop_unmapped)
@@ -338,20 +328,20 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
   )
 
   # ------------------------------------------------------------
-  # 3) Optional PORT data (AFSC + AKFIN fish tickets + fuzzy_dates)
+  # 3) Optional PORT data (AKFIN + AKFIN fish tickets + fuzzy_dates)
   # ------------------------------------------------------------
   port_list <- list()
 
   if (isTRUE(PORT)) {
 
-    # ---- Era A: 1990–1998 (AFSC)
+    # ---- Era A: 1990–1998 (AKFIN)
     if (start_year <= 1998) {
-      PAlfreq <- sql_reader("dom_length_port_A.sql")
+      PAlfreq <- sql_reader("dom_length_port_A2.sql")
       PAlfreq <- sql_filter("IN", species, PAlfreq, flag = "-- insert species", value_type = "numeric")
       PAlfreq <- sql_filter("IN", species, PAlfreq, flag = "-- insert spec",    value_type = "numeric")
       PAlfreq <- sql_filter("IN", region_vec,  PAlfreq, flag = "-- insert region",  value_type = "numeric")
 
-      PAD <- DT(sql_run(con_afsc, PAlfreq))
+      PAD <- DT(sql_run(con_akfin, PAlfreq))
       data.table::setnames(PAD, toupper(names(PAD)))
       PAD <- PAD[!is.na(EXTRAPOLATED_WEIGHT) & !is.na(GEAR)]
       PAD <- add_area2_quarter(PAD)
@@ -362,7 +352,7 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
 
       PORTAL <- PAD[, .(SPECIES, YEAR, GEAR, AREA2, AREA, MONTH, QUARTER,
                         MONTH_WED = MONTH,
-                        CRUISE, VES_AKR_ADFG, HAUL_JOIN, SEX, LENGTH,
+                        CRUISE, PERMIT,VES_AKR_ADFG, HAUL_JOIN, SEX, LENGTH,
                         SUM_FREQUENCY, EXTRAPOLATED_WEIGHT, NUMB, SOURCE)]
       PORTAL <- PORTAL[YEAR >= start_year & YEAR <= end_year]
       PORTAL <- add_region_group(PORTAL, region_def = region_def, area_col = "AREA", drop_unmapped = drop_unmapped)
@@ -373,8 +363,8 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
     # ---- fish tickets needed for eras B/D
     PBFTCKT3 <- NULL
     if (start_year <= 2010 && end_year >= 1999) {
-      pb_sql <- sql_reader("fish_ticket.sql")
-      pb_sql <- sql_filter("IN", species_catch, pb_sql, flag = "-- insert species", value_type = "character")
+      pb_sql <- sql_reader("fish_ticket2.sql")
+      pb_sql <- sql_filter("IN", species, pb_sql, flag = "-- insert species", value_type = "character")
       PBFTCKT <- DT(sql_run(con_akfin, pb_sql))
       data.table::setnames(PBFTCKT, toupper(names(PBFTCKT)))
 
@@ -391,11 +381,11 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
 
     # ---- Era B: 1999–2007
     if (start_year <= 2007 && end_year >= 1999) {
-      PBlfreq <- sql_reader("dom_length_port_B.sql")
+      PBlfreq <- sql_reader("dom_length_port_B2.sql")
       PBlfreq <- sql_filter("IN", species, PBlfreq, flag = "-- insert species", value_type = "numeric")
       PBlfreq <- sql_filter("IN", region_vec,  PBlfreq, flag = "-- insert region",  value_type = "numeric")
 
-      PBLFREQ <- DT(sql_run(con_afsc, PBlfreq))
+      PBLFREQ <- DT(sql_run(con_akfin, PBlfreq))
       data.table::setnames(PBLFREQ, toupper(names(PBLFREQ)))
 
       PBLFREQ[, DELIVERY_DATE := format(as.Date(DELIVERY_DATE, format = "%Y-%m-%d", origin = "1970-01-01"))]
@@ -445,7 +435,7 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
 
       PORTBL <- PBCOMB_all[, .(SPECIES, YEAR, GEAR, AREA2, AREA, MONTH, QUARTER,
                                MONTH_WED = MONTH,
-                               CRUISE, VES_AKR_ADFG, HAUL_JOIN, SEX, LENGTH,
+                               CRUISE, PERMIT, VES_AKR_ADFG, HAUL_JOIN, SEX, LENGTH,
                                SUM_FREQUENCY, EXTRAPOLATED_WEIGHT, NUMB, SOURCE)]
       PORTBL <- PORTBL[YEAR >= start_year & YEAR <= end_year]
       PORTBL <- add_region_group(PORTBL, region_def = region_def, area_col = "AREA", drop_unmapped = drop_unmapped)
@@ -455,11 +445,11 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
 
     # ---- Era D: 2008–2010
     if (start_year <= 2010 && end_year >= 2008) {
-      PDlfreq <- sql_reader("dom_length_port_D.sql")
+      PDlfreq <- sql_reader("dom_length_port_D2.sql")
       PDlfreq <- sql_filter("IN", species, PDlfreq, flag = "-- insert species", value_type = "numeric")
       PDlfreq <- sql_filter("IN", region_vec,  PDlfreq, flag = "-- insert region",  value_type = "numeric")
 
-      PDLFREQ <- DT(sql_run(con_afsc, PDlfreq))
+      PDLFREQ <- DT(sql_run(con_akfin, PDlfreq))
       data.table::setnames(PDLFREQ, toupper(names(PDLFREQ)))
       PDLFREQ[, DELIVERING_VESSEL := suppressWarnings(as.numeric(DELIVERING_VESSEL))]
 
@@ -492,7 +482,7 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
 
       PORTDL <- PDCOMB[, .(SPECIES, YEAR, GEAR, AREA2, AREA, MONTH, QUARTER,
                            MONTH_WED = MONTH,
-                           CRUISE, VES_AKR_ADFG, HAUL_JOIN, SEX, LENGTH,
+                           CRUISE, PERMIT,VES_AKR_ADFG, HAUL_JOIN, SEX, LENGTH,
                            SUM_FREQUENCY, EXTRAPOLATED_WEIGHT, NUMB, SOURCE)]
       PORTDL <- PORTDL[YEAR >= start_year & YEAR <= end_year]
       PORTDL <- add_region_group(PORTDL, region_def = region_def, area_col = "AREA", drop_unmapped = drop_unmapped)
@@ -502,12 +492,11 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
 
     # ---- Era C: 2011–present
     if (end_year >= 2011) {
-      PClfreq <- sql_reader("dom_length_port_C.sql")
+      PClfreq <- sql_reader("dom_length_port_C2.sql")
       PClfreq <- sql_filter("IN", species, PClfreq, flag = "-- insert species",             value_type = "numeric")
-      PClfreq <- sql_filter("IN", species_catch, PClfreq, flag = "-- insert catch_species", value_type = "character")
       PClfreq <- sql_filter("IN", region_vec,  PClfreq, flag = "-- insert region",              value_type = "numeric")
 
-      PCD <- DT(sql_run(con_afsc, PClfreq))
+      PCD <- DT(sql_run(con_akfin, PClfreq))
       data.table::setnames(PCD, toupper(names(PCD)))
       PCD <- PCD[!is.na(TONS_LANDED)]
       PCD <- add_area2_quarter(PCD)
@@ -516,12 +505,12 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
                            priority = c("YAGM_AVE_WT","YAM_AVE_WT","YAQ_AVE_WT","YGM_AVE_WT","YGQ_AVE_WT","YG_AVE_WT"))
 
       PCD[, NUMB := PCD2$TONS_LANDED / (PCD2$AVEWT / 1000)]
-      data.table::setnames(PCD, "PERMIT", "VES_AKR_ADFG")
+      PCD$VES_AKR_ADFG <- PCD$PERMIT
       PCD[, EXTRAPOLATED_WEIGHT := TONS_LANDED * 1000]
 
       PORTCL <- PCD[, .(SPECIES, YEAR, GEAR, AREA2, AREA, MONTH, QUARTER,
                         MONTH_WED = MONTH,
-                        CRUISE, VES_AKR_ADFG, HAUL_JOIN, SEX, LENGTH,
+                        CRUISE, PERMIT,VES_AKR_ADFG, HAUL_JOIN, SEX, LENGTH,
                         SUM_FREQUENCY, EXTRAPOLATED_WEIGHT, NUMB, SOURCE)]
       PORTCL <- PORTCL[YEAR >= start_year & YEAR <= end_year]
       PORTCL <- add_region_group(PORTCL, region_def = region_def, area_col = "AREA", drop_unmapped = drop_unmapped)
@@ -562,7 +551,7 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
     srv_age <- GET_SURV_AGE(
       con_akfin = con_akfin,
       area      = sp_area,
-      species   = species_srv,
+      species   = species,
       start_yr  = start_year,
       max_age   = max_age
     )
@@ -644,10 +633,10 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
   # ------------------------------------------------------------
   # 5) Blend catch -> numbers (AKFIN)
   # ------------------------------------------------------------
-  catch_sql <- sql_reader("dom_catch2.sql")
+  catch_sql <- sql_reader("dom_catch3.sql")
   catch_sql <- sql_filter("<=", end_year,   catch_sql, flag = "-- insert eyear", value_type = "numeric")
   catch_sql <- sql_filter(">=", start_year, catch_sql, flag = "-- insert syear", value_type = "numeric")
-  catch_sql <- sql_filter("IN", species_catch, catch_sql, flag = "-- insert species_catch", value_type = "character")
+  catch_sql <- sql_filter("IN", species, catch_sql, flag = "-- insert species", value_type = "character")
   catch_sql <- sql_filter("IN", region_vec, catch_sql, flag = "-- insert area", value_type = "character")
 
   CATCHT <- DT(sql_run(con_akfin, catch_sql))
@@ -736,7 +725,7 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
   y2 <- x[!is.na(YAGM_TNUM)]
 
   # attach SEASON (optional) using chosen month column
-  y2 <- add_user_season(y2, season_def = season_def, month_col = season_month, verbose = verbose)
+  y2 <- add_user_season(y2, season_def = season_def, month_col = "MONTH", verbose = verbose)
   if (!is.null(season_def)) y2 <- y2[!is.na(SEASON)]
 
   y2[, WEIGHT1 := SUM_FREQUENCY / YAGMH_SFREQ]

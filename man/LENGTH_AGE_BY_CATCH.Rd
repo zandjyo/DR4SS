@@ -6,10 +6,7 @@
 \usage{
 LENGTH_AGE_BY_CATCH(
   con_akfin,
-  con_afsc,
   species,
-  species_catch,
-  species_srv,
   sp_area,
   start_year,
   end_year,
@@ -19,10 +16,10 @@ LENGTH_AGE_BY_CATCH(
   map_sample = c("MAP", "sample"),
   max_length = NULL,
   max_age = 12L,
+  max_wt = 50L,
   verbose = TRUE,
   seed = 1L,
   season_def = NULL,
-  season_month = c("MONTH", "MONTH_WED"),
   region_def = NULL,
   drop_unmapped = TRUE,
   wgoa_cod = TRUE
@@ -31,13 +28,7 @@ LENGTH_AGE_BY_CATCH(
 \arguments{
 \item{con_akfin}{DBI connection to AKFIN.}
 
-\item{con_afsc}{DBI connection to AFSC.}
-
 \item{species}{Numeric observer species code used in observer/port length SQL.}
-
-\item{species_catch}{Catch accounting species identifier used in blend catch SQL.}
-
-\item{species_srv}{RACE species code used in survey age pull (GET_SURV_AGE).}
 
 \item{sp_area}{Stock assessment area code: "BS","AI","GOA","BSWGOA".
 Used for default region filtering (if \code{region_def} is NULL) and passed to
@@ -67,9 +58,6 @@ age-predictor helper functions.}
 \item{season_def}{Optional named list mapping season labels to month integers (1..12),
 e.g. list(A=1:3,B=4:6,C=7:9,D=10:12) or list(A=1:6,B=7:12).}
 
-\item{season_month}{Which month column to use for season mapping: "MONTH" or "MONTH_WED".
-Default "MONTH".}
-
 \item{region_def}{Optional named list mapping REGION_GRP labels to AREA codes, e.g.
 listlist(BS=c(500:539),WGOA=c(610),CGOA=c(620:649),EGOA=650:659),AI=c(541:544)). If provided, outputs are by REGION_GRP.
 If NULL, a single REGION_GRP is used (equal to \code{sp_area}) and default area filtering is used.}
@@ -78,6 +66,9 @@ If NULL, a single REGION_GRP is used (equal to \code{sp_area}) and default area 
 to a REGION_GRP. Default TRUE.}
 
 \item{wgoa_cod}{Logical. If TRUE, moves catch from NMFS area 620 west of -158 longitude into the 610 region group}
+
+\item{season_month}{Which month column to use for season mapping: "MONTH" or "MONTH_WED".
+Default "MONTH".}
 }
 \value{
 A list with two elements:
@@ -110,10 +101,10 @@ Workflow:
 \item Pull observer length-frequency + species composition expansions (AKFIN).
 \item Optionally pull port length-frequency across eras:
 \itemize{
-\item 1990–1998 (AFSC)
-\item 1999–2007 (AFSC lengths + AKFIN fish tickets; uses fuzzy matching)
-\item 2008–2010 (AFSC lengths + fuzzy matching to fish tickets)
-\item 2011–present (AFSC; direct landings fields)
+\item 1990–1998 (AKFIN)
+\item 1999–2007 (AKFIN lengths + AKFIN fish tickets; uses fuzzy matching)
+\item 2008–2010 (AKFIN lengths + fuzzy matching to fish tickets)
+\item 2011–present (AKFIN; direct landings fields)
 The \code{fuzzy_dates()} steps are retained because they are required to recover
 port samples that do not join to fish tickets by ID.
 }

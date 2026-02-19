@@ -10,9 +10,10 @@ fit_lw_key(
   trim_q = c(0.01, 0.99),
   min_strata_n = 1,
   allow_year = TRUE,
-  allow_quarter = TRUE,
+  allow_season = TRUE,
   allow_gear = TRUE,
-  allow_area = TRUE,
+  allow_region = TRUE,
+  allow_area = FALSE,
   allow_sex = TRUE
 )
 }
@@ -25,7 +26,7 @@ fit_lw_key(
 
 \item{min_strata_n}{minimum N per stratum cell before retaining a factor term}
 
-\item{allow_year, allow_quarter, allow_gear, allow_area, allow_sex}{include those factor terms if supported}
+\item{allow_year, allow_quarter, allow_gear, allow_region, allow_area, allow_sex}{include those factor terms if supported}
 }
 \value{
 list(model=mgcv::gam, kept_terms=character, data_used=data.table)

@@ -89,17 +89,17 @@ SQL filters (your existing conventions; e.g. "BSAI" or "BS-NBS" depending on fun
 \item{one_fleet}{Logical; if TRUE, aggregate fishery catch gears into fleet 1 in
 \code{\link[=build_fishery_catch_ss]{build_fishery_catch_ss()}}.}
 
-\item{do_fsh_ewaa}{Logical; if TRUE run \code{\link[=fishery_ewaa]{fishery_ewaa()}}.}
+\item{do_fsh_ewaa}{Logical; if TRUE run fishery_ewaa().}
 
-\item{do_fsh_lcomp}{Logical; if TRUE run \code{\link[=LENGTH_BY_CATCH_short]{LENGTH_BY_CATCH_short()}}.}
+\item{do_fsh_lcomp}{Logical; if TRUE run LENGTH_BY_CATCH().}
 
-\item{fsh_lcomp_sex}{Logical; passed to LENGTH_BY_CATCH_short(SEX=...).}
+\item{fsh_lcomp_sex}{Logical; passed to LENGTH_BY_CATCH(SEX=...).}
 
-\item{fsh_lcomp_port}{Logical; passed to LENGTH_BY_CATCH_short(PORT=...).}
+\item{fsh_lcomp_port}{Logical; passed to LENGTH_BY_CATCH(PORT=...).}
 
-\item{for_species_catch}{Optional “foreign catch species” code used by LENGTH_BY_CATCH_short.}
+\item{for_species_catch}{Optional “foreign catch species” code used by LENGTH_BY_CATCH.}
 
-\item{fsh_ewaa_split_sex}{Logical; if TRUE, fishery EWAA fits/predicts split by sex and
+\item{fsh_ewaa_split_sex}{Logical; if TRUE, fishery_ewaa_catch_weighted() fits/predicts split by sex and
 outputs F/M tables.}
 }
 \value{
@@ -115,7 +115,7 @@ Wrapper that orchestrates the DR4SS data pulls/formatters for a single assessmen
 \item Catch is built via \code{\link[=build_fishery_catch_ss]{build_fishery_catch_ss()}} (no inline SQL in the wrapper).
 \item Longline RPN CPUE is built via \code{\link[=build_ll_cpue]{build_ll_cpue()}} and \strong{fleet number is user-specified}
 (no \code{ONE_FLEET} logic to toggle index 3 vs 5).
-\item Fishery EWAA is built via \code{\link[=fishery_ewaa]{fishery_ewaa()}} (optionally split by sex).
-\item Fishery catch-weighted lcomp is built via \code{\link[=LENGTH_BY_CATCH_short]{LENGTH_BY_CATCH_short()}}.
+\item Fishery EWAA is built via (optionally split by sex).
+\item Fishery catch-weighted lcomp is built via .
 }
 }

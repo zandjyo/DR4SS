@@ -2,7 +2,7 @@
 % Please edit documentation in R/estimate_neff_from_hauls.R
 \name{estimate_neff_from_hauls}
 \alias{estimate_neff_from_hauls}
-\title{Estimate effective multinomial sample size (Neff) from haul-level compositions}
+\title{Estimate effective multinomial sample size (Neff) from composition data}
 \usage{
 estimate_neff_from_hauls(
   haul_bin_dt,
@@ -12,43 +12,51 @@ estimate_neff_from_hauls(
   min_hauls = 5L,
   eps = 1e-10,
   cap = 500,
-  agg_fun = stats::median
+  agg_fun = stats::median,
+  bootstrap = FALSE,
+  psu_cols = "HAUL_JOIN",
+  boot_strata_cols = NULL,
+  nboot = 200L,
+  seed = 1L
 )
 }
 \arguments{
-\item{haul_bin_dt}{A data.frame/data.table with haul-level counts.
-Must contain YEAR, HAUL_JOIN, COUNT, and a bin column specified by \code{bin_col}
-(e.g., LENGTH or AGE or BIN).}
+\item{haul_bin_dt}{data.frame/data.table with YEAR, a bin column, and counts.}
 
-\item{bin_col}{Name of the bin column in \code{haul_bin_dt}. Common values are
-\code{"LENGTH"}, \code{"AGE"}, or \code{"BIN"}. Default \code{"BIN"}.}
+\item{bin_col}{Bin column name (one of "BIN","LENGTH","AGE") or provide your own by
+renaming before calling.}
 
-\item{group_cols}{Optional character vector of additional grouping columns besides YEAR
+\item{count_col}{Count column name. If NULL, each row is treated as one fish (COUNT=1).}
+
+\item{group_cols}{Additional grouping columns besides YEAR for the final output
 (e.g., c("GEAR","SEX","AREA2")).}
 
-\item{min_hauls}{Minimum unique hauls required to estimate Neff (else NA).}
+\item{min_hauls}{Minimum unique PSUs required to estimate Neff (else NA).}
 
-\item{eps}{Small number to avoid division-by-zero in variance.}
+\item{eps}{Small number to avoid division-by-zero.}
 
-\item{cap}{Optional cap for Neff (e.g., 500). Use NULL for no cap.}
+\item{cap}{Optional cap for Neff; set NULL for no cap.}
 
-\item{agg_fun}{Function to aggregate bin-specific Neff across bins; default median.}
+\item{agg_fun}{Aggregation function across bins (default median).}
+
+\item{bootstrap}{Logical; if TRUE, estimate var(p) via bootstrap resampling.}
+
+\item{psu_cols}{Character vector defining the resampling unit (e.g. "HAUL_JOIN",
+or c("VESSEL_ID","HAUL_JOIN")).}
+
+\item{boot_strata_cols}{Character vector defining the strata within which PSUs
+are resampled (default YEAR + group_cols).}
+
+\item{nboot}{Number of bootstrap replicates.}
+
+\item{seed}{RNG seed.}
 }
 \value{
-data.table with YEAR (+group_cols), N_HAUL, and NEFF.
+data.table with YEAR (+group_cols), N_HAUL (=#PSUs), and NEFF.
+If bootstrap=TRUE, also returns NEFF_Q025/NEFF_Q975 as simple uncertainty bounds.
 }
 \description{
-Computes an approximate multinomial effective sample size (Neff) using the
-between-haul variance in composition proportions. This is useful for deriving
-annual (or annual-by-strata) composition sample sizes for Stock Synthesis.
-}
-\details{
-Input data should be haul-level counts by bin (length or age). The function:
-\enumerate{
-\item Computes within-haul proportions for each bin: \eqn{p_{h,b} = n_{h,b} / \sum_b n_{h,b}}
-\item For each YEAR (and optional grouping factors), computes the mean and variance
-across hauls for each bin: \eqn{\bar{p}_b, \mathrm{Var}(p_b)}
-\item Estimates bin-specific Neff: \eqn{N_{\mathrm{eff},b} = \bar{p}_b(1-\bar{p}_b) / \mathrm{Var}(p_b)}
-\item Aggregates across bins (median by default) to get a single Neff per YEAR/group.
-}
+Computes an approximate multinomial effective sample size (Neff) using either:
+(1) analytic between-haul variance in proportions (fast), or
+(2) a bootstrap over user-defined sampling units (PSUs) within user-defined strata.
 }
