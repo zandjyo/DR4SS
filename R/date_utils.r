@@ -55,3 +55,69 @@ WED <- function(x) {
   y[YR != yr2]$next_saturday <- lubridate::date(paste0(y[YR != yr2]$YR, "-12-31"))
   return(y$next_saturday)
 }
+
+
+WED_safe <- function(x) {
+  stopifnot(requireNamespace("data.table", quietly = TRUE))
+  stopifnot(requireNamespace("lubridate", quietly = TRUE))
+
+  # ---- 1) Coerce x to Date safely ----
+  xd <- x
+
+  # If already Date/POSIXt, convert cleanly
+  if (inherits(xd, "POSIXt")) {
+    xd <- as.Date(xd)
+  } else if (!inherits(xd, "Date")) {
+
+    # If numeric, try common encodings
+    if (is.numeric(xd)) {
+      # guess YYYYMMDD if it looks like 8 digits
+      xd_chr <- as.character(xd)
+      xd_chr[nchar(xd_chr) == 8] <- sprintf(
+        "%s-%s-%s",
+        substr(xd_chr[nchar(xd_chr) == 8], 1, 4),
+        substr(xd_chr[nchar(xd_chr) == 8], 5, 6),
+        substr(xd_chr[nchar(xd_chr) == 8], 7, 8)
+      )
+      xd <- suppressWarnings(lubridate::ymd(xd_chr, quiet = TRUE))
+    } else {
+      # character/factor/etc: try a few common orders
+      xd_chr <- trimws(as.character(xd))
+      xd_chr[xd_chr %in% c("", "NA", "NaN", "NULL")] <- NA_character_
+
+      xd <- suppressWarnings(lubridate::parse_date_time(
+        xd_chr,
+        orders = c(
+          "Y-m-d", "Y/m/d", "Ymd",
+          "m/d/Y", "m-d-Y",
+          "Y-m-d H:M:S", "Y/m/d H:M:S", "Ymd HMS"
+        ),
+        tz = "UTC"
+      ))
+      xd <- as.Date(xd)
+    }
+  }
+
+  # ---- 2) Compute next Saturday (your intent) ----
+  y <- data.table::data.table(
+    xdate   = xd,
+    weekday = weekdays(xd),
+    wed     = lubridate::ceiling_date(xd, "week"),
+    plus    = data.table::fifelse(weekdays(xd) == "Sunday", 6L, -1L),
+    YR      = lubridate::year(xd)
+  )
+
+  # base next_saturday
+  y[, next_saturday := as.Date(lubridate::date(wed)) + plus]
+
+  # your special-case rule
+  y[YR < 1993 & !is.na(wed), next_saturday := as.Date(lubridate::date(wed))]
+
+  # fix year-crossing: force to Dec 31 of original year
+  y[, yr2 := lubridate::year(next_saturday)]
+  y[!is.na(YR) & !is.na(yr2) & YR != yr2,
+    next_saturday := as.Date(sprintf("%04d-12-31", as.integer(YR)))
+  ]
+
+  y$next_saturday
+}
