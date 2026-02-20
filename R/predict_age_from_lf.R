@@ -3,7 +3,9 @@
 #' Fits should be precomputed with fit_age_predictor().
 #'
 #' @param lf_dt data.frame/data.table with LENGTH (cm), SEX (M/F/U), MONTH, AREA, YEAR,
-#'   and optionally N (counts). If N missing, assumes 1 per row.
+#'   and optionally N (counts) and REGION_GRP (user-defined region grouping from region_def).
+#'   If REGION_GRP is present, predictions will use the hierarchical spatial structure
+#'   (REGION + AREA nested within REGION) that was fit in fit_age_predictor().
 #' @param predictor Object from fit_age_predictor().
 #' @param target Return type: "agecomp", "posterior_rows", or "row_age".
 #' @param map_or_sample If returning integer ages, use "MAP" or "sample".
@@ -43,11 +45,15 @@ predict_age_from_lf <- function(lf_dt,
     lf[, MONTH := as.integer(as.character(MONTH))]
   })
   lf[, SEX := toupper(trimws(as.character(SEX)))]
-  
+
+  # AREA -> AREA_K (keep consistent with fit_age_predictor() survey NMFS_AREA logic)
+  # Here AREA is expected numeric NMFS_AREA (e.g., 510, 520, 610, ...)
+  # If AREA is already a 2-digit code (51/52/...), trunc(AREA/10) will also work.
+  suppressWarnings(lf[, AREA := as.numeric(AREA)])
   lf[, AREA_K := as.character(trunc(AREA / 10))]
   lf[AREA_K == "50", AREA_K := "51"]
 
-  lf <- lf[is.finite(LENGTH) & !is.na(YEAR) & is.finite(MONTH)]
+  lf <- lf[is.finite(LENGTH) & !is.na(YEAR) & is.finite(MONTH) & !is.na(AREA_K)]
 
   # month->quarter
   lf[, QUARTER := 4L]
@@ -59,13 +65,38 @@ predict_age_from_lf <- function(lf_dt,
   # Handle sex U = combined
   lf[, SEX2 := data.table::fifelse(SEX %in% c("F","M"), SEX, "U")]
 
+  # REGION_GRP support (optional): if model was fit with REGION_F/AREA_R, we should supply them
+  have_region_levels <- !is.null(predictor$levels) &&
+    !is.null(predictor$levels$survey$REGION_F) &&
+    length(predictor$levels$survey$REGION_F) > 0 &&
+    !all(is.na(predictor$levels$survey$REGION_F))
+
+  survey_uses_region <- have_region_levels && length(predictor$levels$survey$REGION_F) > 1
+  delta_uses_region  <- !is.null(predictor$levels$fishery$REGION_F) &&
+    length(predictor$levels$fishery$REGION_F) > 1
+
+  # if either fit uses region, REGION_GRP column must exist (and be non-missing)
+  if (survey_uses_region || delta_uses_region) {
+    if (!"REGION_GRP" %in% names(lf)) {
+      stop("predictor models include REGION_GRP effects, but lf_dt has no REGION_GRP column.", call. = FALSE)
+    }
+    lf[, REGION_GRP := as.character(REGION_GRP)]
+    lf <- lf[!is.na(REGION_GRP) & nzchar(REGION_GRP)]
+    if (nrow(lf) == 0) stop("lf_dt has 0 usable rows after REGION_GRP filtering.", call. = FALSE)
+  } else {
+    # ensure column exists for keying simplicity, but it won't be used in predict()
+    if (!"REGION_GRP" %in% names(lf)) lf[, REGION_GRP := "ALL"]
+    lf[, REGION_GRP := as.character(REGION_GRP)]
+  }
+
   # Collapse LF to unique combos to avoid redundant predictions
-  keys <- c("YEAR","QUARTER","AREA_K","SEX2","LENGTH")
+  # NOTE: REGION_GRP is included in keys to support region-specific predictions.
+  keys <- c("YEAR","QUARTER","AREA_K","REGION_GRP","SEX2","LENGTH")
   lf_u <- lf[, .(N = sum(N, na.rm = TRUE)), by = keys]
 
   ages <- 0:predictor$maxage
 
-  # priors
+  # priors (still keyed by AREA_K, YEAR, QUARTER, SEX as in fit_age_predictor())
   pool <- data.table::copy(predictor$prior_pool)
   glob <- data.table::copy(predictor$prior_global)
   cell <- data.table::copy(predictor$prior_cell)
@@ -73,9 +104,9 @@ predict_age_from_lf <- function(lf_dt,
   # function: get prior vector for one row
   get_prior_vec <- function(y, q, a_k, sx) {
     if (sx == "U") {
-      pF <- get_prior_vec(y,q,a_k,"F")
-      pM <- get_prior_vec(y,q,a_k,"M")
-      return((pF + pM)/2)
+      pF <- get_prior_vec(y, q, a_k, "F")
+      pM <- get_prior_vec(y, q, a_k, "M")
+      return((pF + pM) / 2)
     }
 
     pc <- cell[YEAR == y & QUARTER == q & AREA_K == a_k & SEX == sx]
@@ -111,28 +142,61 @@ predict_age_from_lf <- function(lf_dt,
   if (!is.finite(sd_q) || sd_q <= 0) sd_q <- max(sd_s, sd_d, 1)
 
   # helper to get mu_q(age) for one row (sex U handled by averaging)
-  get_mu_q <- function(y, q, a_k, sx) {
+  get_mu_q <- function(y, q, a_k, r_g, sx) {
+
     mu_for_sex <- function(sx2) {
+
+      # ---- Survey backbone prediction newdata ----
+      lev_s <- predictor$levels$survey
       nd_q3 <- data.frame(
-        SEX_F  = factor(sx2, levels = c("F","M")),
+        SEX_F  = factor(sx2, levels = lev_s$SEX_F),
         AGE_G  = ages,
-        YEAR_F = factor(y),
-        AREA_F = factor(a_k)
+        YEAR_F = factor(y, levels = lev_s$YEAR_F)
       )
+
+      if (!is.null(lev_s$REGION_F) && length(lev_s$REGION_F) > 1) {
+        # region + nested area
+        region_f <- factor(r_g, levels = lev_s$REGION_F)
+        area_f   <- factor(a_k, levels = lev_s$AREA_F)
+        area_r   <- factor(interaction(region_f, area_f, drop = TRUE), levels = lev_s$AREA_R)
+
+        nd_q3$REGION_F <- region_f
+        nd_q3$AREA_F   <- area_f
+        nd_q3$AREA_R   <- area_r
+      } else {
+        # area only
+        if (!is.null(lev_s$AREA_F)) nd_q3$AREA_F <- factor(a_k, levels = lev_s$AREA_F)
+      }
+
       mu_q3 <- as.numeric(stats::predict(predictor$survey_fit, newdata = nd_q3, type = "response"))
 
+      # ---- Fishery delta prediction newdata ----
+      lev_f <- predictor$levels$fishery
       nd_d <- data.frame(
-        Q_F    = factor(q, levels = 1:4),
+        Q_F    = factor(q, levels = lev_f$Q_F),
         AGE_G  = ages,
-        SEX_F  = factor(sx2, levels = c("F","M")),
-        YEAR_F = factor(y),
-        AREA_F = factor(a_k)
+        SEX_F  = factor(sx2, levels = lev_f$SEX_F),
+        YEAR_F = factor(y, levels = lev_f$YEAR_F)
       )
+
+      if (!is.null(lev_f$REGION_F) && length(lev_f$REGION_F) > 1) {
+        region_f <- factor(r_g, levels = lev_f$REGION_F)
+        area_f   <- factor(a_k, levels = lev_f$AREA_F)
+        area_r   <- factor(interaction(region_f, area_f, drop = TRUE), levels = lev_f$AREA_R)
+
+        nd_d$REGION_F <- region_f
+        nd_d$AREA_F   <- area_f
+        nd_d$AREA_R   <- area_r
+      } else {
+        if (!is.null(lev_f$AREA_F)) nd_d$AREA_F <- factor(a_k, levels = lev_f$AREA_F)
+      }
+
       mu_d <- as.numeric(stats::predict(predictor$delta_fit, newdata = nd_d, type = "response"))
+
       mu_q3 + mu_d
     }
 
-    if (sx == "U") return((mu_for_sex("F") + mu_for_sex("M"))/2)
+    if (sx == "U") return((mu_for_sex("F") + mu_for_sex("M")) / 2)
     mu_for_sex(sx)
   }
 
@@ -142,12 +206,13 @@ predict_age_from_lf <- function(lf_dt,
     y  <- lf_u$YEAR[i]
     q  <- lf_u$QUARTER[i]
     a  <- lf_u$AREA_K[i]
+    rg <- lf_u$REGION_GRP[i]
     sx <- lf_u$SEX2[i]
     L  <- lf_u$LENGTH[i]
 
-    mu_q <- get_mu_q(y,q,a,sx)
+    mu_q <- get_mu_q(y, q, a, rg, sx)
     lik  <- stats::dnorm(L, mean = mu_q, sd = sd_q)
-    pr   <- get_prior_vec(y,q,a,sx)
+    pr   <- get_prior_vec(y, q, a, sx)
     post <- lik * pr
     if (!any(is.finite(post)) || sum(post) <= 0) post <- rep(1/length(ages), length(ages))
     post <- post / sum(post)
@@ -182,10 +247,13 @@ predict_age_from_lf <- function(lf_dt,
   }
 
   # ---- target: agecomp ----
+  # Note: output retains REGION_GRP in the grouping to keep compositions consistent with how predictions were made.
   age_dt <- lf_u[, .(AGE = ages, P = unlist(posterior)), by = keys]
-  age_dt <- merge(age_dt, lf_u[, c(keys,"N"), with = FALSE], by = keys)
+  age_dt <- merge(age_dt, lf_u[, c(keys, "N"), with = FALSE], by = keys)
   age_dt[, EXP_N := N * P]
 
   age_dt[, .(EXP_N = sum(EXP_N, na.rm = TRUE)),
-         by = .(YEAR, QUARTER, AREA_K, SEX2, AGE)][order(YEAR,QUARTER,AREA_K,SEX2,AGE)]
+         by = .(YEAR, QUARTER, AREA_K, REGION_GRP, SEX2, AGE)][
+           order(YEAR, QUARTER, REGION_GRP, AREA_K, SEX2, AGE)
+         ]
 }

@@ -46,6 +46,7 @@
 #' @param PORT Logical. If TRUE, include port sampling data when available.
 #' @param age_length "LENGTH" or "AGE". If "AGE", lengths are converted to predicted ages.
 #' @param map_sample "MAP" or "sample" used by predict_age_from_lf() when returning integer ages.
+#' @param n_samples for age composition if "sample" enter the number of samples you wish to produce, output becomes a list 
 #' @param max_length Optional numeric. If provided, drop rows in ALL_DATA with LENGTH > max_length
 #'   (applied before AGE prediction, so it affects the predictor inputs too).
 #' @param max_age Plus-group maximum age (used when age_length="AGE").
@@ -61,7 +62,7 @@
 #' @param drop_unmapped Logical. If TRUE and region_def is provided, drop rows whose AREA does not map
 #'   to a REGION_GRP. Default TRUE.
 #' @param wgoa_cod Logical. If TRUE, moves catch from NMFS area 620 west of -158 longitude into the 610 region group 
-#'
+#' @param return_predictor Logical. if TRUE returns age at length predictor model in list
 #' @return A list with two elements:
 #' \describe{
 #'   \item{aggregated}{data.table of YEAR x REGION_GRP x LENGTH/AGE (and optionally SEASON/SEX) with FREQ and sample summaries.}
@@ -78,6 +79,7 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
                                 PORT = TRUE,
                                 age_length = c("LENGTH","AGE"),
                                 map_sample = c("MAP","sample"),
+                                n_samples = 1,
                                 max_length = NULL,
                                 max_age = 12L,
                                 max_wt = 50L,
@@ -86,7 +88,8 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
                                 season_def = NULL,
                                 region_def = NULL,
                                 drop_unmapped = TRUE,
-                                wgoa_cod =TRUE) {
+                                wgoa_cod =TRUE,
+                                return_predictor = FALSE) {
 
   age_length <- match.arg(age_length)
   map_sample <- match.arg(map_sample)
@@ -110,6 +113,11 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
       stop("`max_length` must be a single positive number (or NULL).", call. = FALSE)
     }
   }
+
+  n_samples <- as.integer(n_samples)
+  if (!is.finite(n_samples) || n_samples < 1L) stop("`n_samples` must be >= 1.", call. = FALSE)
+
+  do_samples <- identical(map_sample, "sample") && n_samples > 1L && identical(age_length,"AGE")
 
   sp_area <- toupper(sp_area)
 
@@ -279,7 +287,21 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
   if(isTRUE(wgoa_cod)){Dspcomp[AREA == 620 & LONDD_END <= -158 ]$AREA <- 610} ## moving the WGOA line in 610 to -158.
   
   # WED/MONTH_WED derived from HDAY (assumes WED() exists in your namespace)
-  Dspcomp[, WED := WED(HDAY)]
+
+ # robust parse of HDAY into a true Date (NOT week-ending yet)
+  Dspcomp[, HDAY_DATE := as.Date(lubridate::parse_date_time(
+    trimws(as.character(HDAY)),
+    orders = c("Y-m-d","Y/m/d","Ymd","m/d/Y","m-d-Y","Ymd HMS","Y-m-d H:M:S"),
+    tz = "UTC"
+  ))]
+
+  bad <- Dspcomp[is.na(HDAY_DATE), .N]
+  if (bad > 0 && isTRUE(verbose)) message("Dropping ", bad, " rows with unparseable HDAY.")
+  Dspcomp <- Dspcomp[!is.na(HDAY_DATE)]
+
+  # now compute WED safely
+  Dspcomp[, WED := WED_safe(HDAY_DATE)]
+
   Dspcomp[, MONTH_WED := lubridate::month(WED)]
   Dspcomp[, MONTH := as.integer(as.character(MONTH))]
   Dspcomp[, QUARTER := 4L]
@@ -393,10 +415,11 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
         PBFTCKT3[, DELIVERY_DATE := format(as.Date(DELIVERY_DATE, format = "%Y%m%d", origin = "1970-01-01"))]
       }
 
-      PBCOMB <- merge(PBLFREQ, PBFTCKT3, by = "FISH_TICKET_NO", all.x = TRUE)
+
+      PBCOMB <- merge(PBLFREQ, PBFTCKT3, by = c("DELIVERY_DATE","DELIVERING_VESSEL","FISH_TICKET_NO"), all.x = TRUE)
 
       na_block <- DT(PBCOMB[is.na(TONS), 1:ncol(PBLFREQ)])
-      data.table::setnames(na_block, names(PBLFREQ))
+      #data.table::setnames(na_block, names(PBLFREQ))
 
       ok_block <- PBCOMB[!is.na(TONS)]
 
@@ -408,39 +431,43 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
         PBCOMB_all <- ok_block
       }
 
-      PBCOMB_all[, MONTH := as.integer(lubridate::month(DELIVERY_DATE))]
-      PBCOMB_all[, QUARTER := 4L]
-      PBCOMB_all[MONTH < 3, QUARTER := 1L]
-      PBCOMB_all[MONTH >= 3 & MONTH < 7, QUARTER := 2L]
-      PBCOMB_all[MONTH >= 7 & MONTH < 10, QUARTER := 3L]
-      PBCOMB_all[, AREA2 := trunc(as.numeric(AREA) / 10) * 10]
-      PBCOMB_all[AREA2 == 500, AREA2 := 510]
+      if(nrow(PBCOMB_all) > 0){
+        PBCOMB_all[, MONTH := as.integer(lubridate::month(DELIVERY_DATE))]
+        PBCOMB_all[, QUARTER := 4L]
+        PBCOMB_all[MONTH < 3, QUARTER := 1L]
+        PBCOMB_all[MONTH >= 3 & MONTH < 7, QUARTER := 2L]
+        PBCOMB_all[MONTH >= 7 & MONTH < 10, QUARTER := 3L]
+        PBCOMB_all[, AREA2 := trunc(as.numeric(AREA) / 10) * 10]
+        PBCOMB_all[AREA2 == 500, AREA2 := 510]
 
-      PBCOMB5 <- assign_avewt(
-        PBCOMB_all,
-        joins = list(
-          list(table = YAGM_AVWT, by = c("YEAR","AREA2","MONTH","GEAR")),
-          list(table = YGM_AVWT,  by = c("YEAR","GEAR","MONTH")),
-          list(table = YGQ_AVWT,  by = c("YEAR","GEAR","QUARTER")),
-          list(table = YAM_AVWT,  by = c("YEAR","AREA2","MONTH")),
-          list(table = YAQ_AVWT,  by = c("YEAR","AREA2","QUARTER")),
-          list(table = YG_AVWT,   by = c("YEAR","GEAR"))
-        ),
-        priority = c("YAGM_AVE_WT","YAM_AVE_WT","YGQ_AVE_WT","YGM_AVE_WT","YGQ_AVE_WT","YG_AVE_WT")
-      )
+        PBCOMB5 <- assign_avewt(
+          PBCOMB_all,
+          joins = list(
+            list(table = YAGM_AVWT, by = c("YEAR","AREA2","MONTH","GEAR")),
+            list(table = YGM_AVWT,  by = c("YEAR","GEAR","MONTH")),
+            list(table = YGQ_AVWT,  by = c("YEAR","GEAR","QUARTER")),
+            list(table = YAM_AVWT,  by = c("YEAR","AREA2","MONTH")),
+            list(table = YAQ_AVWT,  by = c("YEAR","AREA2","QUARTER")),
+            list(table = YG_AVWT,   by = c("YEAR","GEAR"))
+          ),
+          priority = c("YAGM_AVE_WT","YAM_AVE_WT","YGQ_AVE_WT","YGM_AVE_WT","YGQ_AVE_WT","YG_AVE_WT")
+       )
 
-      PBCOMB_all[, NUMB := PBCOMB5$TONS_LANDED / (PBCOMB5$AVEWT / 1000)]
-      data.table::setnames(PBCOMB_all, "DELIVERING_VESSEL", "VES_AKR_ADFG")
-      PBCOMB_all[, EXTRAPOLATED_WEIGHT := TONS_LANDED * 1000]
+        PBCOMB_all[, NUMB := PBCOMB5$TONS_LANDED / (PBCOMB5$AVEWT / 1000)]
+        data.table::setnames(PBCOMB_all, "DELIVERING_VESSEL", "VES_AKR_ADFG")
+        PBCOMB_all[, EXTRAPOLATED_WEIGHT := TONS_LANDED * 1000]
 
-      PORTBL <- PBCOMB_all[, .(SPECIES, YEAR, GEAR, AREA2, AREA, MONTH, QUARTER,
-                               MONTH_WED = MONTH,
-                               CRUISE, PERMIT, VES_AKR_ADFG, HAUL_JOIN, SEX, LENGTH,
-                               SUM_FREQUENCY, EXTRAPOLATED_WEIGHT, NUMB, SOURCE)]
-      PORTBL <- PORTBL[YEAR >= start_year & YEAR <= end_year]
-      PORTBL <- add_region_group(PORTBL, region_def = region_def, area_col = "AREA", drop_unmapped = drop_unmapped)
+        PORTBL <- PBCOMB_all[, .(SPECIES, YEAR, GEAR, AREA2, AREA, MONTH, QUARTER,
+                                 MONTH_WED = MONTH,
+                                 CRUISE, PERMIT, VES_AKR_ADFG, HAUL_JOIN, SEX, LENGTH,
+                                 SUM_FREQUENCY, EXTRAPOLATED_WEIGHT, NUMB, SOURCE)]
+        PORTBL <- PORTBL[YEAR >= start_year & YEAR <= end_year]
+        PORTBL <- add_region_group(PORTBL, region_def = region_def, area_col = "AREA", drop_unmapped = drop_unmapped)
+        summarize_by_year(PORTBL, "Port length data 1999–2007", col = "SUM_FREQUENCY")
+        } else { PORTBL <- NULL}
+
       port_list[["PORTBL"]] <- PORTBL
-      summarize_by_year(PORTBL, "Port length data 1999–2007", col = "SUM_FREQUENCY")
+      
     }
 
     # ---- Era D: 2008–2010
@@ -546,7 +573,7 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
   # ------------------------------------------------------------
   if (age_length == "AGE") {
 
-    if(!is.null(region_def)){sp_area=="ALL"}
+    if(!is.null(region_def)){ sp_area <- "ALL"}
 
     srv_age <- GET_SURV_AGE(
       con_akfin = con_akfin,
@@ -584,7 +611,7 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
                   con=con_akfin,
                   species=species,
                   season_def=season_def,
-                  region_def=region_def,
+                  region_def = region_def,
                   start_year = start_year,
                   end_year = end_year,
                   wgoa_cod=wgoa_cod,
@@ -599,7 +626,7 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
       message("Fishery ages (rows with non-missing AGE by YEAR):")
       print(fish_raw[!is.na(AGE), .(N = .N), by = .(YEAR,REGION_GRP)][order(YEAR)])
 
-      obs_yrs <- sort(unique(ALL_DATA$YEAR))
+      obs_yrs <- ALL_DATA[, sort(unique(YEAR))]
       fsh_age_yrs <- sort(unique(fish_raw$YEAR))
       missing <- setdiff(obs_yrs, fsh_age_yrs)
       if (length(missing) > 0) {
@@ -618,7 +645,32 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
       min_n_cell = 30L,
       prior_mix  = 0.7
     )
+ 
+  
+  if (do_samples) {
+    # produce a list of sampled ALL_DATA draws
+    ALL_DATA_list <- lapply(seq_len(n_samples), function(i) {
+      predict_age_from_lf(
+        lf_dt         = ALL_DATA,
+        predictor     = age_pred,
+        target        = "row_age",
+        map_or_sample = "sample",
+        seed          = as.integer(seed + i - 1L)
+      )
+    })
 
+    # convert predicted age -> LENGTH (as integer bin) for each draw
+    ALL_DATA_list <- lapply(ALL_DATA_list, function(ad) {
+      ad <- data.table::as.data.table(ad)
+      ad[, LENGTH := as.integer(AGE_HAT)]
+      ad
+    })
+
+    ALL_DATA <- ALL_DATA_list
+    rm(ALL_DATA_list)
+
+  } else {
+    # single deterministic draw (MAP) or single stochastic sample
     ALL_DATA <- predict_age_from_lf(
       lf_dt         = ALL_DATA,
       predictor     = age_pred,
@@ -626,8 +678,10 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
       map_or_sample = map_sample,
       seed          = seed
     )
+    ALL_DATA[, LENGTH := as.integer(AGE_HAT)]
+  }
+    
 
-    ALL_DATA[, LENGTH := as.integer(AGE_HAT)]  ## this is here simply because this was designed as a length comp function first... 
   }
 
   # ------------------------------------------------------------
@@ -686,244 +740,268 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
   CATCHT4 <- merge(CATCHT4, xt_YAG, by = c("REGION_GRP","YEAR","AREA2","GEAR"), all.x = TRUE)
   CATCHT4 <- merge(CATCHT4, xt_YG,  by = c("REGION_GRP","YEAR","GEAR"),        all.x = TRUE)
   CATCHT4 <- merge(CATCHT4, xt_Y,   by = c("REGION_GRP","YEAR"),               all.x = TRUE)
+  CATCHT4[, SPECIES := as.numeric(SPECIES)]
 
   # ------------------------------------------------------------
   # 6) Length data prep for weighting
   # ------------------------------------------------------------
-  Length <- ALL_DATA[GEAR %in% c("POT","TRW","HAL")]
-  Length[, YEAR := as.numeric(YEAR)]
-  Length[, MONTH := as.integer(as.character(MONTH))]
-  if (!"MONTH_WED" %in% names(Length)) Length[, MONTH_WED := MONTH]
-  Length[, YAGMH_SNUM := NUMB]
-  Length[, YAGMH_STONS := EXTRAPOLATED_WEIGHT / 1000]
+  compute_comps_one <- function(ALL_DATA_one) {
+    Length <- data.table::as.data.table(ALL_DATA_one)[GEAR %in% c("POT","TRW","HAL")]
+    Length[, YEAR := as.numeric(YEAR)]
+    Length[, MONTH := as.integer(as.character(MONTH))]
+    if (!"MONTH_WED" %in% names(Length)) Length[, MONTH_WED := MONTH]
+    Length[, YAGMH_SNUM := NUMB]
+    Length[, YAGMH_STONS := EXTRAPOLATED_WEIGHT / 1000]
 
-  # ensure region group exists (ALL_DATA should already carry it via OBS/PORT)
-  if (!"REGION_GRP" %in% names(Length)) {
-    Length <- add_region_group(Length, region_def = region_def, area_col = "AREA", drop_unmapped = drop_unmapped)
-  }
-
-  if (!isTRUE(SEX)) {
-    Length <- Length[, .(SUM_FREQUENCY = sum(SUM_FREQUENCY)),
-                     by = .(REGION_GRP, SPECIES,YEAR,AREA2,GEAR,MONTH,MONTH_WED,CRUISE,VES_AKR_ADFG,HAUL_JOIN,
-                            LENGTH,YAGMH_STONS,YAGMH_SNUM)]
-  } else {
-    Length <- Length[, .(SUM_FREQUENCY = sum(SUM_FREQUENCY)),
-                     by = .(REGION_GRP, SPECIES,YEAR,AREA2,GEAR,MONTH,MONTH_WED,CRUISE,VES_AKR_ADFG,HAUL_JOIN,
-                            SEX,LENGTH,YAGMH_STONS,YAGMH_SNUM)]
-  }
-
-  L_YAGMH <- Length[, .(YAGMH_SFREQ = sum(SUM_FREQUENCY)), by = .(CRUISE,VES_AKR_ADFG,HAUL_JOIN)]
-  Length <- merge(Length, L_YAGMH, by = c("CRUISE","VES_AKR_ADFG","HAUL_JOIN"), all.x = TRUE)
-
-  L_YAGM <- Length[, .(YAGM_SNUM = sum(YAGMH_SNUM), YAGM_SFREQ = sum(SUM_FREQUENCY)),
-                   by = .(REGION_GRP, YEAR,AREA2,GEAR,MONTH)]
-  Length <- merge(Length, L_YAGM, by = c("REGION_GRP","YEAR","AREA2","GEAR","MONTH"), all.x = TRUE)
-
-  Length[, SPECIES := as.numeric(SPECIES)]
-  CATCHT4[, SPECIES := as.numeric(SPECIES)]
-  x <- merge(Length, CATCHT4, by = c("REGION_GRP","SPECIES","YEAR","AREA2","GEAR","MONTH"), all.x = TRUE)
-  y2 <- x[!is.na(YAGM_TNUM)]
-
-  # attach SEASON (optional) using chosen month column
-  y2 <- add_user_season(y2, season_def = season_def, month_col = "MONTH", verbose = verbose)
-  if (!is.null(season_def)) y2 <- y2[!is.na(SEASON)]
-
-  y2[, WEIGHT1 := SUM_FREQUENCY / YAGMH_SFREQ]
-  y2[, WEIGHT2 := YAGMH_SNUM / YAGM_SNUM]
-  y2[, WEIGHT3 := YAGM_TNUM / YG_TNUM]
-  y2[, WEIGHT4 := YAGM_TNUM / Y_TNUM]
-
-  y2[, WEIGHTX      := WEIGHT1 * WEIGHT2 * WEIGHT4]
-  y2[, WEIGHTX_GEAR := WEIGHT1 * WEIGHT2 * WEIGHT3]
-
-  y2 <- y2[YAGM_SFREQ > 30]
-
-  # ------------------------------------------------------------
-  # 7) Final compositions (annual or seasonal), now by REGION_GRP
-  # ------------------------------------------------------------
-  have_season <- !is.null(season_def)
-
-  if (!isTRUE(SEX)) {
-    if (!have_season) {
-      agg <- y2[, .(WEIGHT = sum(WEIGHTX, na.rm = TRUE)), by = .(REGION_GRP, YEAR, LENGTH)]
-      agg[, TWEIGHT := sum(WEIGHT), by = .(REGION_GRP, YEAR)]
-      agg[, FREQ := data.table::fifelse(TWEIGHT > 0, WEIGHT / TWEIGHT, 0)]
-      out_agg <- agg[, .(REGION_GRP, YEAR, LENGTH, FREQ)]
-
-      byg <- y2[, .(WEIGHT = sum(WEIGHTX_GEAR, na.rm = TRUE)), by = .(REGION_GRP, YEAR, GEAR, LENGTH)]
-      byg[, TWEIGHT := sum(WEIGHT), by = .(REGION_GRP, YEAR, GEAR)]
-      byg[, FREQ := data.table::fifelse(TWEIGHT > 0, WEIGHT / TWEIGHT, 0)]
-      out_byg <- byg[, .(REGION_GRP, YEAR, GEAR, LENGTH, FREQ)]
-    } else {
-      agg <- y2[, .(WEIGHT = sum(WEIGHTX, na.rm = TRUE)), by = .(REGION_GRP, YEAR, SEASON, LENGTH)]
-      agg[, TWEIGHT := sum(WEIGHT), by = .(REGION_GRP, YEAR, SEASON)]
-      agg[, FREQ := data.table::fifelse(TWEIGHT > 0, WEIGHT / TWEIGHT, 0)]
-      out_agg <- agg[, .(REGION_GRP, YEAR, SEASON, LENGTH, FREQ)]
-
-      byg <- y2[, .(WEIGHT = sum(WEIGHTX_GEAR, na.rm = TRUE)), by = .(REGION_GRP, YEAR, SEASON, GEAR, LENGTH)]
-      byg[, TWEIGHT := sum(WEIGHT), by = .(REGION_GRP, YEAR, SEASON, GEAR)]
-      byg[, FREQ := data.table::fifelse(TWEIGHT > 0, WEIGHT / TWEIGHT, 0)]
-      out_byg <- byg[, .(REGION_GRP, YEAR, SEASON, GEAR, LENGTH, FREQ)]
+    # ensure region group exists (ALL_DATA should already carry it via OBS/PORT)
+    if (!"REGION_GRP" %in% names(Length)) {
+      Length <- add_region_group(Length, region_def = region_def, area_col = "AREA", drop_unmapped = drop_unmapped)
     }
-  } else {
-    if (!have_season) {
-      agg <- y2[, .(WEIGHT = sum(WEIGHTX, na.rm = TRUE)), by = .(REGION_GRP, YEAR, SEX, LENGTH)]
-      agg[, TWEIGHT := sum(WEIGHT), by = .(REGION_GRP, YEAR, SEX)]
-      agg[, FREQ := data.table::fifelse(TWEIGHT > 0, WEIGHT / TWEIGHT, 0)]
-      out_agg <- agg[, .(REGION_GRP, YEAR, SEX, LENGTH, FREQ)]
 
-      byg <- y2[, .(WEIGHT = sum(WEIGHTX_GEAR, na.rm = TRUE)), by = .(REGION_GRP, YEAR, GEAR, SEX, LENGTH)]
-      byg[, TWEIGHT := sum(WEIGHT), by = .(REGION_GRP, YEAR, GEAR, SEX)]
-      byg[, FREQ := data.table::fifelse(TWEIGHT > 0, WEIGHT / TWEIGHT, 0)]
-      out_byg <- byg[, .(REGION_GRP, YEAR, GEAR, SEX, LENGTH, FREQ)]
-    } else {
-      agg <- y2[, .(WEIGHT = sum(WEIGHTX, na.rm = TRUE)), by = .(REGION_GRP, YEAR, SEASON, SEX, LENGTH)]
-      agg[, TWEIGHT := sum(WEIGHT), by = .(REGION_GRP, YEAR, SEASON, SEX)]
-      agg[, FREQ := data.table::fifelse(TWEIGHT > 0, WEIGHT / TWEIGHT, 0)]
-      out_agg <- agg[, .(REGION_GRP, YEAR, SEASON, SEX, LENGTH, FREQ)]
-
-      byg <- y2[, .(WEIGHT = sum(WEIGHTX_GEAR, na.rm = TRUE)), by = .(REGION_GRP, YEAR, SEASON, GEAR, SEX, LENGTH)]
-      byg[, TWEIGHT := sum(WEIGHT), by = .(REGION_GRP, YEAR, SEASON, GEAR, SEX)]
-      byg[, FREQ := data.table::fifelse(TWEIGHT > 0, WEIGHT / TWEIGHT, 0)]
-      out_byg <- byg[, .(REGION_GRP, YEAR, SEASON, GEAR, SEX, LENGTH, FREQ)]
-    }
-  }
-
-  # Dense grids
-  maxL <- max(out_agg$LENGTH, na.rm = TRUE)
-  if (!is.finite(maxL) || maxL <= 0) stop("No valid LENGTH/AGE bins after weighting.", call. = FALSE)
-
-  regions <- sort(unique(as.character(out_agg$REGION_GRP)))
-  years <- sort(unique(out_agg$YEAR))
-  if (!have_season) {
     if (!isTRUE(SEX)) {
-      grid1 <- DT(expand.grid(REGION_GRP = regions, YEAR = years, LENGTH = 1:maxL))
-      out_agg <- merge(grid1, out_agg, by = c("REGION_GRP","YEAR","LENGTH"), all.x = TRUE)
-      out_agg[is.na(FREQ), FREQ := 0]
-
-      grid2 <- DT(expand.grid(REGION_GRP = regions,
-                              YEAR = sort(unique(out_byg$YEAR)),
-                              GEAR = sort(unique(out_byg$GEAR)),
-                              LENGTH = 1:maxL))
-      out_byg <- merge(grid2, out_byg, by = c("REGION_GRP","YEAR","GEAR","LENGTH"), all.x = TRUE)
-      out_byg[is.na(FREQ), FREQ := 0]
+      Length <- Length[, .(SUM_FREQUENCY = sum(SUM_FREQUENCY)),
+                       by = .(REGION_GRP, SPECIES,YEAR,AREA2,GEAR,MONTH,MONTH_WED,CRUISE,VES_AKR_ADFG,HAUL_JOIN,
+                              LENGTH,YAGMH_STONS,YAGMH_SNUM)]
     } else {
-      sex_levels <- sort(unique(out_agg$SEX))
-      grid1 <- DT(expand.grid(REGION_GRP = regions, YEAR = years, SEX = sex_levels, LENGTH = 1:maxL))
-      out_agg <- merge(grid1, out_agg, by = c("REGION_GRP","YEAR","SEX","LENGTH"), all.x = TRUE)
-      out_agg[is.na(FREQ), FREQ := 0]
-
-      grid2 <- DT(expand.grid(REGION_GRP = regions,
-                              YEAR = sort(unique(out_byg$YEAR)),
-                              GEAR = sort(unique(out_byg$GEAR)),
-                              SEX = sex_levels,
-                              LENGTH = 1:maxL))
-      out_byg <- merge(grid2, out_byg, by = c("REGION_GRP","YEAR","GEAR","SEX","LENGTH"), all.x = TRUE)
-      out_byg[is.na(FREQ), FREQ := 0]
+      Length <- Length[, .(SUM_FREQUENCY = sum(SUM_FREQUENCY)),
+                       by = .(REGION_GRP, SPECIES,YEAR,AREA2,GEAR,MONTH,MONTH_WED,CRUISE,VES_AKR_ADFG,HAUL_JOIN,
+                              SEX,LENGTH,YAGMH_STONS,YAGMH_SNUM)]
     }
-  } else {
-    seas_levels <- levels(y2$SEASON)
+
+    L_YAGMH <- Length[, .(YAGMH_SFREQ = sum(SUM_FREQUENCY)), by = .(CRUISE,VES_AKR_ADFG,HAUL_JOIN)]
+    Length <- merge(Length, L_YAGMH, by = c("CRUISE","VES_AKR_ADFG","HAUL_JOIN"), all.x = TRUE)
+
+    L_YAGM <- Length[, .(YAGM_SNUM = sum(YAGMH_SNUM), YAGM_SFREQ = sum(SUM_FREQUENCY)),
+                     by = .(REGION_GRP, YEAR,AREA2,GEAR,MONTH)]
+    Length <- merge(Length, L_YAGM, by = c("REGION_GRP","YEAR","AREA2","GEAR","MONTH"), all.x = TRUE)
+
+    Length[, SPECIES := as.numeric(SPECIES)]
+    x <- merge(Length, CATCHT4, by = c("REGION_GRP","SPECIES","YEAR","AREA2","GEAR","MONTH"), all.x = TRUE)
+    y2 <- x[!is.na(YAGM_TNUM)]
+
+    # attach SEASON (optional) using chosen month column
+    y2 <- add_user_season(y2, season_def = season_def, month_col = "MONTH", verbose = verbose)
+    if (!is.null(season_def)) y2 <- y2[!is.na(SEASON)]
+
+    y2[, WEIGHT1 := SUM_FREQUENCY / YAGMH_SFREQ]
+    y2[, WEIGHT2 := YAGMH_SNUM / YAGM_SNUM]
+    y2[, WEIGHT3 := YAGM_TNUM / YG_TNUM]
+    y2[, WEIGHT4 := YAGM_TNUM / Y_TNUM]
+
+    y2[, WEIGHTX      := WEIGHT1 * WEIGHT2 * WEIGHT4]
+    y2[, WEIGHTX_GEAR := WEIGHT1 * WEIGHT2 * WEIGHT3]
+
+    y2 <- y2[YAGM_SFREQ > 30]
+
+    # ------------------------------------------------------------
+    # 7) Final compositions (annual or seasonal), now by REGION_GRP
+    # ------------------------------------------------------------
+    have_season <- !is.null(season_def)
+
     if (!isTRUE(SEX)) {
-      grid1 <- DT(expand.grid(REGION_GRP = regions, YEAR = years, SEASON = seas_levels, LENGTH = 1:maxL))
-      out_agg <- merge(grid1, out_agg, by = c("REGION_GRP","YEAR","SEASON","LENGTH"), all.x = TRUE)
-      out_agg[is.na(FREQ), FREQ := 0]
-      out_agg[, SEASON := factor(SEASON, levels = seas_levels)]
+      if (!have_season) {
+        agg <- y2[, .(WEIGHT = sum(WEIGHTX, na.rm = TRUE)), by = .(REGION_GRP, YEAR, LENGTH)]
+        agg[, TWEIGHT := sum(WEIGHT), by = .(REGION_GRP, YEAR)]
+        agg[, FREQ := data.table::fifelse(TWEIGHT > 0, WEIGHT / TWEIGHT, 0)]
+        out_agg <- agg[, .(REGION_GRP, YEAR, LENGTH, FREQ)]
 
-      grid2 <- DT(expand.grid(REGION_GRP = regions,
-                              YEAR = sort(unique(out_byg$YEAR)),
-                              SEASON = seas_levels,
-                              GEAR = sort(unique(out_byg$GEAR)),
-                              LENGTH = 1:maxL))
-      out_byg <- merge(grid2, out_byg, by = c("REGION_GRP","YEAR","SEASON","GEAR","LENGTH"), all.x = TRUE)
-      out_byg[is.na(FREQ), FREQ := 0]
-      out_byg[, SEASON := factor(SEASON, levels = seas_levels)]
+        byg <- y2[, .(WEIGHT = sum(WEIGHTX_GEAR, na.rm = TRUE)), by = .(REGION_GRP, YEAR, GEAR, LENGTH)]
+        byg[, TWEIGHT := sum(WEIGHT), by = .(REGION_GRP, YEAR, GEAR)]
+        byg[, FREQ := data.table::fifelse(TWEIGHT > 0, WEIGHT / TWEIGHT, 0)]
+        out_byg <- byg[, .(REGION_GRP, YEAR, GEAR, LENGTH, FREQ)]
+      } else {
+        agg <- y2[, .(WEIGHT = sum(WEIGHTX, na.rm = TRUE)), by = .(REGION_GRP, YEAR, SEASON, LENGTH)]
+        agg[, TWEIGHT := sum(WEIGHT), by = .(REGION_GRP, YEAR, SEASON)]
+        agg[, FREQ := data.table::fifelse(TWEIGHT > 0, WEIGHT / TWEIGHT, 0)]
+        out_agg <- agg[, .(REGION_GRP, YEAR, SEASON, LENGTH, FREQ)]
+
+        byg <- y2[, .(WEIGHT = sum(WEIGHTX_GEAR, na.rm = TRUE)), by = .(REGION_GRP, YEAR, SEASON, GEAR, LENGTH)]
+        byg[, TWEIGHT := sum(WEIGHT), by = .(REGION_GRP, YEAR, SEASON, GEAR)]
+        byg[, FREQ := data.table::fifelse(TWEIGHT > 0, WEIGHT / TWEIGHT, 0)]
+        out_byg <- byg[, .(REGION_GRP, YEAR, SEASON, GEAR, LENGTH, FREQ)]
+      }
     } else {
-      sex_levels <- sort(unique(out_agg$SEX))
-      grid1 <- DT(expand.grid(REGION_GRP = regions, YEAR = years, SEASON = seas_levels, SEX = sex_levels, LENGTH = 1:maxL))
-      out_agg <- merge(grid1, out_agg, by = c("REGION_GRP","YEAR","SEASON","SEX","LENGTH"), all.x = TRUE)
-      out_agg[is.na(FREQ), FREQ := 0]
-      out_agg[, SEASON := factor(SEASON, levels = seas_levels)]
+      if (!have_season) {
+        agg <- y2[, .(WEIGHT = sum(WEIGHTX, na.rm = TRUE)), by = .(REGION_GRP, YEAR, SEX, LENGTH)]
+        agg[, TWEIGHT := sum(WEIGHT), by = .(REGION_GRP, YEAR, SEX)]
+        agg[, FREQ := data.table::fifelse(TWEIGHT > 0, WEIGHT / TWEIGHT, 0)]
+        out_agg <- agg[, .(REGION_GRP, YEAR, SEX, LENGTH, FREQ)]
 
-      grid2 <- DT(expand.grid(REGION_GRP = regions,
-                              YEAR = sort(unique(out_byg$YEAR)),
-                              SEASON = seas_levels,
-                              GEAR = sort(unique(out_byg$GEAR)),
-                              SEX = sex_levels,
-                              LENGTH = 1:maxL))
-      out_byg <- merge(grid2, out_byg, by = c("REGION_GRP","YEAR","SEASON","GEAR","SEX","LENGTH"), all.x = TRUE)
-      out_byg[is.na(FREQ), FREQ := 0]
-      out_byg[, SEASON := factor(SEASON, levels = seas_levels)]
+        byg <- y2[, .(WEIGHT = sum(WEIGHTX_GEAR, na.rm = TRUE)), by = .(REGION_GRP, YEAR, GEAR, SEX, LENGTH)]
+        byg[, TWEIGHT := sum(WEIGHT), by = .(REGION_GRP, YEAR, GEAR, SEX)]
+        byg[, FREQ := data.table::fifelse(TWEIGHT > 0, WEIGHT / TWEIGHT, 0)]
+        out_byg <- byg[, .(REGION_GRP, YEAR, GEAR, SEX, LENGTH, FREQ)]
+      } else {
+        agg <- y2[, .(WEIGHT = sum(WEIGHTX, na.rm = TRUE)), by = .(REGION_GRP, YEAR, SEASON, SEX, LENGTH)]
+        agg[, TWEIGHT := sum(WEIGHT), by = .(REGION_GRP, YEAR, SEASON, SEX)]
+        agg[, FREQ := data.table::fifelse(TWEIGHT > 0, WEIGHT / TWEIGHT, 0)]
+        out_agg <- agg[, .(REGION_GRP, YEAR, SEASON, SEX, LENGTH, FREQ)]
+
+        byg <- y2[, .(WEIGHT = sum(WEIGHTX_GEAR, na.rm = TRUE)), by = .(REGION_GRP, YEAR, SEASON, GEAR, SEX, LENGTH)]
+        byg[, TWEIGHT := sum(WEIGHT), by = .(REGION_GRP, YEAR, SEASON, GEAR, SEX)]
+        byg[, FREQ := data.table::fifelse(TWEIGHT > 0, WEIGHT / TWEIGHT, 0)]
+        out_byg <- byg[, .(REGION_GRP, YEAR, SEASON, GEAR, SEX, LENGTH, FREQ)]
+      }
     }
+
+    # Dense grids
+    maxL <- max(out_agg$LENGTH, na.rm = TRUE)
+    if (!is.finite(maxL) || maxL <= 0) stop("No valid LENGTH/AGE bins after weighting.", call. = FALSE)
+
+    regions <- sort(unique(as.character(out_agg$REGION_GRP)))
+    years <- sort(unique(out_agg$YEAR))
+    if (!have_season) {
+      if (!isTRUE(SEX)) {
+        grid1 <- data.table::CJ(REGION_GRP = regions, YEAR = years, LENGTH = 1:maxL, unique = TRUE)
+        out_agg <- merge(grid1, out_agg, by = c("REGION_GRP","YEAR","LENGTH"), all.x = TRUE)
+        out_agg[is.na(FREQ), FREQ := 0]
+
+        grid2 <- data.table::CJ(REGION_GRP = regions,
+                                YEAR = sort(unique(out_byg$YEAR)),
+                                GEAR = sort(unique(out_byg$GEAR)),
+                                LENGTH = 1:maxL)
+        out_byg <- merge(grid2, out_byg, by = c("REGION_GRP","YEAR","GEAR","LENGTH"), all.x = TRUE)
+        out_byg[is.na(FREQ), FREQ := 0]
+      } else {
+        sex_levels <- sort(unique(out_agg$SEX))
+        grid1 <- data.table::CJ(REGION_GRP = regions, YEAR = years, SEX = sex_levels, LENGTH = 1:maxL)
+        out_agg <- merge(grid1, out_agg, by = c("REGION_GRP","YEAR","SEX","LENGTH"), all.x = TRUE)
+        out_agg[is.na(FREQ), FREQ := 0]
+
+        grid2 <- data.table::CJ(REGION_GRP = regions,
+                                YEAR = sort(unique(out_byg$YEAR)),
+                                GEAR = sort(unique(out_byg$GEAR)),
+                                SEX = sex_levels,
+                                LENGTH = 1:maxL)
+        out_byg <- merge(grid2, out_byg, by = c("REGION_GRP","YEAR","GEAR","SEX","LENGTH"), all.x = TRUE)
+        out_byg[is.na(FREQ), FREQ := 0]
+      }
+    } else {
+      seas_levels <- levels(y2$SEASON)
+      if (!isTRUE(SEX)) {
+        grid1 <- data.table::CJ(REGION_GRP = regions, YEAR = years, SEASON = seas_levels, LENGTH = 1:maxL)
+        out_agg <- merge(grid1, out_agg, by = c("REGION_GRP","YEAR","SEASON","LENGTH"), all.x = TRUE)
+        out_agg[is.na(FREQ), FREQ := 0]
+        out_agg[, SEASON := factor(SEASON, levels = seas_levels)]
+
+        grid2 <- data.table::CJ(REGION_GRP = regions,
+                                YEAR = sort(unique(out_byg$YEAR)),
+                                SEASON = seas_levels,
+                                GEAR = sort(unique(out_byg$GEAR)),
+                                LENGTH = 1:maxL)
+        out_byg <- merge(grid2, out_byg, by = c("REGION_GRP","YEAR","SEASON","GEAR","LENGTH"), all.x = TRUE)
+        out_byg[is.na(FREQ), FREQ := 0]
+        out_byg[, SEASON := factor(SEASON, levels = seas_levels)]
+      } else {
+        sex_levels <- sort(unique(out_agg$SEX))
+        grid1 <- data.table::CJ(REGION_GRP = regions, YEAR = years, SEASON = seas_levels, SEX = sex_levels, LENGTH = 1:maxL)
+        out_agg <- merge(grid1, out_agg, by = c("REGION_GRP","YEAR","SEASON","SEX","LENGTH"), all.x = TRUE)
+        out_agg[is.na(FREQ), FREQ := 0]
+        out_agg[, SEASON := factor(SEASON, levels = seas_levels)]
+
+        grid2 <- data.table::CJ(REGION_GRP = regions,
+                                YEAR = sort(unique(out_byg$YEAR)),
+                                SEASON = seas_levels,
+                                GEAR = sort(unique(out_byg$GEAR)),
+                                SEX = sex_levels,
+                                LENGTH = 1:maxL)
+        out_byg <- merge(grid2, out_byg, by = c("REGION_GRP","YEAR","SEASON","GEAR","SEX","LENGTH"), all.x = TRUE)
+        out_byg[is.na(FREQ), FREQ := 0]
+        out_byg[, SEASON := factor(SEASON, levels = seas_levels)]
+      }
+    }
+
+    # Sample size summaries (include REGION_GRP, and SEASON if present)
+    if (!isTRUE(SEX)) {
+      if (!have_season) {
+        samp <- y2[, .(
+          NSAMP = sum(SUM_FREQUENCY, na.rm = TRUE),
+          NHAUL = data.table::uniqueN(HAUL_JOIN),
+          NSTRATA = data.table::uniqueN(paste(AREA2, MONTH, GEAR))
+        ), by = .(REGION_GRP, YEAR)]
+        out_agg <- merge(out_agg, samp, by = c("REGION_GRP","YEAR"), all.x = TRUE)
+
+        sampg <- y2[, .(
+          NSAMP = sum(SUM_FREQUENCY, na.rm = TRUE),
+          NHAUL = data.table::uniqueN(HAUL_JOIN),
+          NSTRATA = data.table::uniqueN(paste(AREA2, MONTH, GEAR))
+        ), by = .(REGION_GRP, YEAR, GEAR)]
+        out_byg <- merge(out_byg, sampg, by = c("REGION_GRP","YEAR","GEAR"), all.x = TRUE)
+      } else {
+        samp <- y2[, .(
+          NSAMP = sum(SUM_FREQUENCY, na.rm = TRUE),
+          NHAUL = data.table::uniqueN(HAUL_JOIN),
+          NSTRATA = data.table::uniqueN(paste(AREA2, as.character(SEASON), GEAR))
+        ), by = .(REGION_GRP, YEAR, SEASON)]
+        out_agg <- merge(out_agg, samp, by = c("REGION_GRP","YEAR","SEASON"), all.x = TRUE)
+
+        sampg <- y2[, .(
+          NSAMP = sum(SUM_FREQUENCY, na.rm = TRUE),
+          NHAUL = data.table::uniqueN(HAUL_JOIN),
+          NSTRATA = data.table::uniqueN(paste(AREA2, as.character(SEASON), GEAR))
+        ), by = .(REGION_GRP, YEAR, SEASON, GEAR)]
+        out_byg <- merge(out_byg, sampg, by = c("REGION_GRP","YEAR","SEASON","GEAR"), all.x = TRUE)
+      }
+    } else {
+      if (!have_season) {
+        samp <- y2[, .(
+          NSAMP = sum(SUM_FREQUENCY, na.rm = TRUE),
+          NHAUL = data.table::uniqueN(HAUL_JOIN),
+          NSTRATA = data.table::uniqueN(paste(AREA2, MONTH, GEAR))
+        ), by = .(REGION_GRP, YEAR, SEX)]
+        out_agg <- merge(out_agg, samp, by = c("REGION_GRP","YEAR","SEX"), all.x = TRUE)
+
+        sampg <- y2[, .(
+          NSAMP = sum(SUM_FREQUENCY, na.rm = TRUE),
+          NHAUL = data.table::uniqueN(HAUL_JOIN),
+          NSTRATA = data.table::uniqueN(paste(AREA2, MONTH, GEAR))
+        ), by = .(REGION_GRP, YEAR, GEAR, SEX)]
+        out_byg <- merge(out_byg, sampg, by = c("REGION_GRP","YEAR","GEAR","SEX"), all.x = TRUE)
+      } else {
+        samp <- y2[, .(
+          NSAMP = sum(SUM_FREQUENCY, na.rm = TRUE),
+          NHAUL = data.table::uniqueN(HAUL_JOIN),
+          NSTRATA = data.table::uniqueN(paste(AREA2, as.character(SEASON), GEAR))
+        ), by = .(REGION_GRP, YEAR, SEASON, SEX)]
+        out_agg <- merge(out_agg, samp, by = c("REGION_GRP","YEAR","SEASON","SEX"), all.x = TRUE)
+
+        sampg <- y2[, .(
+          NSAMP = sum(SUM_FREQUENCY, na.rm = TRUE),
+          NHAUL = data.table::uniqueN(HAUL_JOIN),
+          NSTRATA = data.table::uniqueN(paste(AREA2, as.character(SEASON), GEAR))
+        ), by = .(REGION_GRP, YEAR, SEASON, GEAR, SEX)]
+        out_byg <- merge(out_byg, sampg, by = c("REGION_GRP","YEAR","SEASON","GEAR","SEX"), all.x = TRUE)
+      }
+    }
+
+    if (age_length == "AGE") {
+      data.table::setnames(out_byg, "LENGTH", "AGE")
+      data.table::setnames(out_agg, "LENGTH", "AGE")
+    }
+    
+    list(aggregated = out_agg[], by_gear = out_byg[])
   }
 
-  # Sample size summaries (include REGION_GRP, and SEASON if present)
-  if (!isTRUE(SEX)) {
-    if (!have_season) {
-      samp <- y2[, .(
-        NSAMP = sum(SUM_FREQUENCY, na.rm = TRUE),
-        NHAUL = data.table::uniqueN(HAUL_JOIN),
-        NSTRATA = data.table::uniqueN(paste(AREA2, MONTH, GEAR))
-      ), by = .(REGION_GRP, YEAR)]
-      out_agg <- merge(out_agg, samp, by = c("REGION_GRP","YEAR"), all.x = TRUE)
 
-      sampg <- y2[, .(
-        NSAMP = sum(SUM_FREQUENCY, na.rm = TRUE),
-        NHAUL = data.table::uniqueN(HAUL_JOIN),
-        NSTRATA = data.table::uniqueN(paste(AREA2, MONTH, GEAR))
-      ), by = .(REGION_GRP, YEAR, GEAR)]
-      out_byg <- merge(out_byg, sampg, by = c("REGION_GRP","YEAR","GEAR"), all.x = TRUE)
-    } else {
-      samp <- y2[, .(
-        NSAMP = sum(SUM_FREQUENCY, na.rm = TRUE),
-        NHAUL = data.table::uniqueN(HAUL_JOIN),
-        NSTRATA = data.table::uniqueN(paste(AREA2, as.character(SEASON), GEAR))
-      ), by = .(REGION_GRP, YEAR, SEASON)]
-      out_agg <- merge(out_agg, samp, by = c("REGION_GRP","YEAR","SEASON"), all.x = TRUE)
+  wrap_out <- function(x) {
+    if (!isTRUE(return_predictor) && age_length=="AGE") return(x)
+    list(
+      output = x,
+      age_predictor = age_pred
+    )
+  }
 
-      sampg <- y2[, .(
-        NSAMP = sum(SUM_FREQUENCY, na.rm = TRUE),
-        NHAUL = data.table::uniqueN(HAUL_JOIN),
-        NSTRATA = data.table::uniqueN(paste(AREA2, as.character(SEASON), GEAR))
-      ), by = .(REGION_GRP, YEAR, SEASON, GEAR)]
-      out_byg <- merge(out_byg, sampg, by = c("REGION_GRP","YEAR","SEASON","GEAR"), all.x = TRUE)
-    }
+  if (do_samples) {
+    out_list <- lapply(seq_len(n_samples), function(i) {
+      if (isTRUE(verbose)) message("Compositions: sample ", i, " / ", n_samples)
+      compute_comps_one(ALL_DATA[[i]])
+    })
+    vcat("Done.")
+    return(wrap_out(out_list))
   } else {
-    if (!have_season) {
-      samp <- y2[, .(
-        NSAMP = sum(SUM_FREQUENCY, na.rm = TRUE),
-        NHAUL = data.table::uniqueN(HAUL_JOIN),
-        NSTRATA = data.table::uniqueN(paste(AREA2, MONTH, GEAR))
-      ), by = .(REGION_GRP, YEAR, SEX)]
-      out_agg <- merge(out_agg, samp, by = c("REGION_GRP","YEAR","SEX"), all.x = TRUE)
-
-      sampg <- y2[, .(
-        NSAMP = sum(SUM_FREQUENCY, na.rm = TRUE),
-        NHAUL = data.table::uniqueN(HAUL_JOIN),
-        NSTRATA = data.table::uniqueN(paste(AREA2, MONTH, GEAR))
-      ), by = .(REGION_GRP, YEAR, GEAR, SEX)]
-      out_byg <- merge(out_byg, sampg, by = c("REGION_GRP","YEAR","GEAR","SEX"), all.x = TRUE)
-    } else {
-      samp <- y2[, .(
-        NSAMP = sum(SUM_FREQUENCY, na.rm = TRUE),
-        NHAUL = data.table::uniqueN(HAUL_JOIN),
-        NSTRATA = data.table::uniqueN(paste(AREA2, as.character(SEASON), GEAR))
-      ), by = .(REGION_GRP, YEAR, SEASON, SEX)]
-      out_agg <- merge(out_agg, samp, by = c("REGION_GRP","YEAR","SEASON","SEX"), all.x = TRUE)
-
-      sampg <- y2[, .(
-        NSAMP = sum(SUM_FREQUENCY, na.rm = TRUE),
-        NHAUL = data.table::uniqueN(HAUL_JOIN),
-        NSTRATA = data.table::uniqueN(paste(AREA2, as.character(SEASON), GEAR))
-      ), by = .(REGION_GRP, YEAR, SEASON, GEAR, SEX)]
-      out_byg <- merge(out_byg, sampg, by = c("REGION_GRP","YEAR","SEASON","GEAR","SEX"), all.x = TRUE)
-    }
+    out <- compute_comps_one(ALL_DATA)
+    vcat("Done.")
+    return(wrap_out(out))
   }
 
-  if (age_length == "AGE") {
-    data.table::setnames(out_byg, "LENGTH", "AGE")
-    data.table::setnames(out_agg, "LENGTH", "AGE")
-  }
-
-  vcat("Done.")
-  list(aggregated = out_agg[], by_gear = out_byg[])
 }
