@@ -6,7 +6,6 @@
 \usage{
 get_lengthweight(
   con_akfin,
-  con_afsc = NULL,
   species = 202,
   area = "BS",
   K = 7,
@@ -17,9 +16,6 @@ get_lengthweight(
 }
 \arguments{
 \item{con_akfin}{A DBI connection used to run \code{dom_age_wt.sql}.}
-
-\item{con_afsc}{Optional DBI connection used to run \code{for_age_wt.sql}.
-If \code{NULL}, foreign data are not included.}
 
 \item{species}{Numeric species code (single value).}
 

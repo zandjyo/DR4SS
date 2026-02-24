@@ -5,8 +5,8 @@
 \title{Survey EWAA WTAGE and NAGE tables (optionally split by sex)}
 \usage{
 survey_ewaa(
-  con,
-  species = 21720,
+  con_akfin,
+  species = 202,
   region = "BS",
   maxage = 10,
   split_sex = FALSE,
@@ -14,9 +14,9 @@ survey_ewaa(
 )
 }
 \arguments{
-\item{con}{A DBI connection to the AFSC database.}
+\item{con_akfin}{A DBI connection to the AFSC database.}
 
-\item{species}{Survey species code (numeric/integer).}
+\item{species}{Observer species code (numeric/integer).}
 
 \item{region}{Region code(s) for the survey SQL (character; can be length > 1).}
 

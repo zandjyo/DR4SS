@@ -6,7 +6,7 @@
 #' the SS3 length-composition matrix layout (one row per year).
 #'
 #' @param con_akfin A DBI connection to the AKFIN database.
-#' @param species Numeric species code used by the SQL (e.g., 21720).
+#' @param species Numeric observer species code.
 #' @param bins Numeric vector of SS length-bin lower edges
 #'   (e.g., \code{seq(3.5, 119.5, 1)}).
 #' @param bin Logical; if TRUE, bin integer lengths into \code{bins} using
@@ -28,7 +28,7 @@
 #'
 #' @export
 GET_SURVEY_LCOMP <- function(con_akfin,
-                             species = 21720,
+                             species = 202,
                              bins = seq(4.5, 119.5, 5),
                              bin = TRUE,
                              area = "BS",
@@ -59,7 +59,7 @@ GET_SURVEY_LCOMP <- function(con_akfin,
   }
 
   # ---- haul/sample counts (Nsamp) ----
-  Count_sql <- sql_reader("AKFIN_count.sql")
+  Count_sql <- sql_reader("AKFIN_count_AKFIN.sql")
   Count_sql <- sql_filter("IN", species, Count_sql,
                           flag = "-- insert species",
                           value_type = "numeric")
@@ -76,7 +76,7 @@ GET_SURVEY_LCOMP <- function(con_akfin,
   }
 
   # ---- length compositions ----
-  lcomp_sql <- sql_reader("length_comp.sql")
+  lcomp_sql <- sql_reader("length_comp_AKFIN.sql")
   lcomp_sql <- sql_filter("IN", species, lcomp_sql,
                           flag = "-- insert species",
                           value_type = "numeric")

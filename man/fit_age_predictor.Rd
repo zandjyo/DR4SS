@@ -9,25 +9,42 @@ fit_age_predictor(
   srv_dt,
   maxage = 12L,
   min_n_cell = 30L,
-  prior_mix = 0.7
+  prior_mix = 0.7,
+  k_age_survey = 10L,
+  k_age_delta = 8L
 )
 }
 \arguments{
 \item{fish_dt}{Fishery aged data (from get_fishery_age_wt_data()).
-Must include YEAR, QUARTER, LENGTH (cm), AGE, SEX (F/M), AREA.}
+Must include YEAR, QUARTER, LENGTH (cm), AGE, SEX (F/M/U), AREA.
+If REGION_GRP exists (recommended; from region_def), it will be used for hierarchical spatial REs.}
 
 \item{srv_dt}{Survey aged data (from GET_SURV_AGE()).
-Must include YEAR, LENGTH_MM (mm), AGE, SEX (F/M). All records are Q3.}
+Must include YEAR, LENGTH_MM (mm), AGE, SEX (1/2/3 or F/M/U). All records are Q3.
+If REGION_GRP exists (recommended; from region_def), it will be used for hierarchical spatial REs.}
 
 \item{maxage}{Plus-group maximum age.}
 
 \item{min_n_cell}{Minimum aged fish in a cell to use cell prior (else pooled).}
 
 \item{prior_mix}{Mixing weight for cell prior vs pooled prior.}
+
+\item{k_age_survey}{Target k for survey age smooth (will be reduced if needed).}
+
+\item{k_age_delta}{Target k for fishery delta age smooth (will be reduced if needed).}
 }
 \value{
 A list with fitted models and prior tables.
 }
 \description{
-Call this once, then pass the returned object to predict_age_from_lf().
+Robust to single-level factors (SEX/YEAR/AREA/QUARTER/REGION) and low unique-age support.
+Automatically reduces spline basis dimensions (k) to avoid mgcv "fewer unique
+covariate combinations than k" errors.
+}
+\details{
+Adds optional hierarchical spatial structure when REGION_GRP is present:
+\itemize{
+\item REGION_GRP random effect: broad-scale shifts among user-defined regions
+\item AREA nested within REGION_GRP random effect: fine-scale shifts among areas within region
+}
 }

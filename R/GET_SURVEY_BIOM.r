@@ -10,7 +10,7 @@
 #'
 #' @param con_akfin A DBI connection to the AKFIN database.
 #' @param area Character; one of \code{"GOA"}, \code{"AI"}, \code{"BS"}, \code{"SLOPE"}.
-#' @param species Numeric species code.
+#' @param species Numeric observers species code.
 #' @param start_yr Numeric start year (used in SQL via placeholder \code{-- insert start_year}).
 #'
 #' @return A data.table with column names uppercased, as returned by the SQL query(ies).
@@ -43,7 +43,7 @@ GET_SURVEY_BIOM <- function(con_akfin,
   )
 
   # ---- main query ----
-  pop <- sql_reader("survey_biom.sql")
+  pop <- sql_reader("survey_biom_AKFIN.sql")
   pop <- sql_filter(sql_precode = "IN",  x = area_map$survey,  sql_code = pop,
                     flag = "-- insert survey", value_type = "numeric")
   pop <- sql_filter(sql_precode = "IN",  x = area_map$area_id, sql_code = pop,
@@ -59,7 +59,7 @@ GET_SURVEY_BIOM <- function(con_akfin,
 
   # ---- legacy BS special case: append pre-1987 (survey 98, area_id 99901) ----
   if (area == "BS") {
-    pop1 <- sql_reader("survey_biom.sql")
+    pop1 <- sql_reader("survey_biom_AKFIN.sql")
     pop1 <- sql_filter(sql_precode = "IN", x = 98,     sql_code = pop1,
                        flag = "-- insert survey", value_type = "numeric")
     pop1 <- sql_filter(sql_precode = "IN", x = 99901,  sql_code = pop1,

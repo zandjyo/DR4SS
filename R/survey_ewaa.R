@@ -7,8 +7,8 @@
 #'
 #' Uses package SQL helpers `sql_read()`, `sql_filter()`, and `sql_run()` from sql_utils.R.
 #'
-#' @param con A DBI connection to the AFSC database.
-#' @param species Survey species code (numeric/integer).
+#' @param con_akfin A DBI connection to the AFSC database.
+#' @param species Observer species code (numeric/integer).
 #' @param region Region code(s) for the survey SQL (character; can be length > 1).
 #' @param maxage Plus-group age (ages > maxage are pooled to maxage).
 #' @param split_sex Logical. If TRUE, return separate tables for females (F) and males (M),
@@ -18,8 +18,8 @@
 #' @return If split_sex=FALSE: list(S_WTAGE=..., S_NAGE=...).
 #'   If split_sex=TRUE: list(F=list(S_WTAGE=..., S_NAGE=...), M=list(S_WTAGE=..., S_NAGE=...)).
 #' @export
-survey_ewaa <- function(con,
-                        species = 21720,
+survey_ewaa <- function(con_akfin,
+                        species = 202,
                         region  = "BS",
                         maxage  = 10,
                         split_sex = FALSE,
@@ -33,7 +33,7 @@ survey_ewaa <- function(con,
   }
 
   # --- read SQL from installed package (int/sql) ---
-  sql_code <- sql_reader("srv_ages.sql")
+  sql_code <- sql_reader("srv_ages_AKFIN.sql")
   
     # --- inject species + region ---
   sql_code <- sql_filter(sql_precode = "IN", x = species, sql_code = sql_code, flag = "-- insert species")
@@ -41,7 +41,7 @@ survey_ewaa <- function(con,
                          flag = "-- insert region", value_type = "character")
 
   # --- run ---
-  d <- data.table::as.data.table(sql_run(con, sql_code))
+  d <- data.table::as.data.table(sql_run(con_akfin, sql_code))
   d <- d[Year >= year_min]
 
   # --- validate required columns (Sex only required if split_sex=TRUE) ---

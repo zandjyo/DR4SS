@@ -106,7 +106,7 @@ GET_SURVEY_ACOMP <- function(con_akfin = NULL,
   }
 
   # ---- Nsamp (haul/sample counts) from AKFIN ----
-  Count_sql <- sql_reader("AKFIN_count.sql")
+  Count_sql <- sql_reader("AKFIN_count_AKFIN.sql")
   Count_sql <- sql_filter("IN", species, Count_sql, flag = "-- insert species", value_type = "numeric")
   Count_sql <- sql_filter("IN", area_map$survey, Count_sql, flag = "-- insert survey", value_type = "numeric")
 
@@ -121,7 +121,7 @@ GET_SURVEY_ACOMP <- function(con_akfin = NULL,
   # ---- build Acomp either from AKFIN query or VAST ----
   if (!isTRUE(use_vast)) {
 
-    Age_sql <- sql_reader("survey_agecomp.sql")
+    Age_sql <- sql_reader("survey_agecomp_AKFIN.sql")
     Age_sql <- sql_filter("IN",  area_map$area_id, Age_sql, flag = "-- insert area_id",  value_type = "numeric")
     Age_sql <- sql_filter("=",   species,          Age_sql, flag = "-- insert species",  value_type = "numeric")
     Age_sql <- sql_filter(">=",  start_yr,         Age_sql, flag = "-- insert start_year", value_type = "numeric")
@@ -137,7 +137,7 @@ GET_SURVEY_ACOMP <- function(con_akfin = NULL,
 
     # legacy BS add-on (pre-1987 area_id 99901, survey 98, YEAR <= 1986)
     if (area == "BS") {
-      Age_sql2 <- sql_reader("survey_agecomp.sql")
+      Age_sql2 <- sql_reader("survey_agecomp_AKFIN.sql")
       Age_sql2 <- sql_filter("IN",  99901,   Age_sql2, flag = "-- insert area_id", value_type = "numeric")
       Age_sql2 <- sql_filter("=",   species, Age_sql2, flag = "-- insert species", value_type = "numeric")
       Age_sql2 <- sql_filter("<=",  1986,    Age_sql2, flag = "-- insert start_year", value_type = "numeric")

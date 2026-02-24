@@ -5,9 +5,12 @@ SELECT
         norpac.debriefed_age.haul_offload_date,
         norpac.debriefed_age.cruise,
         norpac.debriefed_age.vessel,
+        norpac.debriefed_age.nmfs_area,
+        norpac.debriefed_age.latdd_end,
+        norpac.debriefed_age.londd_end,
         norpac.debriefed_age.gear,
         norpac.debriefed_age.sex,
-	norpac.debriefed_age.age,
+	    norpac.debriefed_age.age,
         norpac.debriefed_age.length,
         norpac.debriefed_age.weight
     FROM
@@ -23,5 +26,8 @@ SELECT
         norpac.debriefed_age.year,
         norpac.debriefed_age.cruise,
         norpac.debriefed_age.vessel,
+        norpac.debriefed_age.nmfs_area,
+        norpac.debriefed_age.latdd_end,
+        norpac.debriefed_age.londd_end,
         norpac.debriefed_age.length,
         norpac.debriefed_age.weight

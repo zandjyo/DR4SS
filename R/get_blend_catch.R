@@ -5,9 +5,9 @@
 #' aggregated by YEAR x MONTH_WED x GEAR (and other fields included in the SQL).
 #' This is typically used to build quarterly catch proportions for catch-weighted EWAA.
 #'
-#' @param con A DBI connection to the COUNCIL/AKFIN Oracle database containing
+#' @param con_akfin A DBI connection to the COUNCIL/AKFIN Oracle database containing
 #'   COUNCIL.COMPREHENSIVE_BLEND_CA.
-#' @param species Species group code(s) for `SPECIES_GROUP_CODE` (numeric/integer).
+#' @param species Observer species code.
 #' @param subarea One or more FMP subarea values for `FMP_SUBAREA` (often character like "BS").
 #' @param year_max Maximum year to include (inclusive).
 #' @param year_min Optional minimum year to include (inclusive). Default NULL (no lower bound).
@@ -17,11 +17,11 @@
 #'   YEAR, MONTH_WED, GEAR, TONS, RETAINED_OR_DISCARDED, SPECIES, AREA, SOURCE.
 #'
 #' @export
-get_blend_catch <- function(con,
+get_blend_catch <- function(con_akfin,
                             species_group,
                             subarea,
                             year_max,
-                            sql_file = "dom_catch_table.sql") {
+                            sql_file = "dom_catch_table_AKFIN.sql") {
 
   if (!requireNamespace("data.table", quietly = TRUE)) {
     stop("Package 'data.table' is required.", call. = FALSE)
@@ -60,12 +60,12 @@ get_blend_catch <- function(con,
     sql_precode = "IN",
     x           = species_group,
     sql_code    = sql_code,
-    flag        = "-- insert species_catch",
+    flag        = "-- insert species",
     value_type  = "character"
   )
 
   # ---- run ----
-  d <- DT(sql_run(con, sql_code))
+  d <- DT(sql_run(con_akfin, sql_code))
   if (nrow(d) == 0L) {
     return(d)
   }

@@ -5,7 +5,7 @@
 \title{Build Stock Synthesis catch table from AKFIN catch query}
 \usage{
 build_fishery_catch_ss(
-  con,
+  con_akfin,
   final_year,
   fsh_sp_label,
   fsh_sp_area,
@@ -17,7 +17,7 @@ build_fishery_catch_ss(
 )
 }
 \arguments{
-\item{con}{DBI connection to AKFIN.}
+\item{con_akfin}{DBI connection to AKFIN.}
 
 \item{final_year}{Last fishery year to include (used in SQL filter).}
 

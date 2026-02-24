@@ -28,7 +28,7 @@
 #'         }
 #' }
 #'
-#' @param con A live DBI connection to AKFIN (or equivalent) used by \code{sql_run()}.
+#' @param con_akfin A live DBI connection to AKFIN (or equivalent) used by \code{sql_run()}.
 #' @param species Species identifier inserted into the SQL query (typically a numeric code).
 #' @param season_def Named list mapping season labels to months, e.g. \code{list(A = 1:4, B = 5:12)}.
 #' @param region_def Named list mapping region labels to NMFS area codes. Area codes must be unique
@@ -48,7 +48,7 @@
 #'
 #' @importFrom data.table as.data.table fifelse rbindlist setorder
 #' @export
-get_fishery_age_wt_data <- function(con,
+get_fishery_age_wt_data <- function(con_akfin,
                                     species,
                                     season_def,
                                     region_def,
@@ -171,7 +171,7 @@ get_fishery_age_wt_data <- function(con,
     flag = "-- insert location"
   )
 
-  d <- DT(sql_run(con, sql_code))
+  d <- DT(sql_run(con_akfin, sql_code))
   if (nrow(d) == 0) stop("Fishery age/weight query returned 0 rows.", call. = FALSE)
 
   names(d) <- toupper(names(d))

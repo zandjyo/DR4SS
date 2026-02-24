@@ -11,6 +11,8 @@ WHERE
     -- insert species
     AND gap_products.akfin_cruise.survey_definition_id
     -- insert survey
+    AND akr.species_translation.from_agency = 'RACE'
+    AND akr.species_translation.to_agency = 'OBS'
 GROUP BY
     gap_products.akfin_cruise.year,
     gap_products.akfin_length_v.species_code

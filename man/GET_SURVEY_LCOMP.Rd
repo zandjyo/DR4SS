@@ -6,7 +6,7 @@
 \usage{
 GET_SURVEY_LCOMP(
   con_akfin,
-  species = 21720,
+  species = 202,
   bins = seq(4.5, 119.5, 5),
   bin = TRUE,
   area = "BS",
@@ -21,7 +21,7 @@ GET_SURVEY_LCOMP(
 \arguments{
 \item{con_akfin}{A DBI connection to the AKFIN database.}
 
-\item{species}{Numeric species code used by the SQL (e.g., 21720).}
+\item{species}{Numeric observer species code.}
 
 \item{bins}{Numeric vector of SS length-bin lower edges
 (e.g., \code{seq(3.5, 119.5, 1)}).}

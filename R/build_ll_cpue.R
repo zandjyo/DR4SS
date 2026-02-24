@@ -14,7 +14,7 @@
 #'
 #' @return A data.frame with columns year, seas, index, obs, se_log
 #' @export
-build_ll_cpue <- function(con=conn$akfin,
+build_ll_cpue <- function(con_akfin=conn$akfin,
                           ly = 2025,
                           srv_sp_str = 21720,
                           sp_area='BSAI',
@@ -37,7 +37,7 @@ build_ll_cpue <- function(con=conn$akfin,
   DT <- data.table::as.data.table
 
   # ---- read and filter SQL ----
-  sql_code <- sql_reader("LL_RPN.sql")
+  sql_code <- sql_reader("LL_RPN_AKFIN.sql")
 
   sql_code <- sql_filter(sql_precode = "<=", x = ly,           sql_code = sql_code, flag = "-- insert year", value_type = c("numeric"))
   sql_code <- sql_filter(sql_precode = "IN", x = srv_sp_str,   sql_code = sql_code, flag = "-- insert species", value_type = c("numeric"))
@@ -45,7 +45,7 @@ build_ll_cpue <- function(con=conn$akfin,
   sql_code <- sql_filter(sql_precode = "IN", x = LL_sp_region, sql_code = sql_code, flag = "-- insert region",value_type = c("character"))
 
   # ---- run query ----
-  LL_RPN <- sql_run(con, sql_code) %>%
+  LL_RPN <- sql_run(con_akfin, sql_code) %>%
     dplyr::rename_all(tolower) %>%
     dplyr::group_by(year) %>%
     dplyr::summarise(

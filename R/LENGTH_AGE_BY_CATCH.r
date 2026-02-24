@@ -273,7 +273,7 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
   # ------------------------------------------------------------
   # 1) Observer lengths (AKFIN)
   # ------------------------------------------------------------
-  lfreq <- sql_reader("dom_length.sql")
+  lfreq <- sql_reader("dom_length_AKFIN.sql")
   lfreq <- sql_filter("IN", species, lfreq, flag = "-- insert species", value_type = "numeric")
   lfreq <- sql_filter("IN", species, lfreq, flag = "-- insert spec",    value_type = "numeric")
   lfreq <- sql_filter("IN", region_vec,  lfreq, flag = "-- insert region",  value_type = "numeric")
@@ -358,7 +358,7 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
 
     # ---- Era A: 1990–1998 (AKFIN)
     if (start_year <= 1998) {
-      PAlfreq <- sql_reader("dom_length_port_A2.sql")
+      PAlfreq <- sql_reader("dom_length_port_A_AKFIN.sql")
       PAlfreq <- sql_filter("IN", species, PAlfreq, flag = "-- insert species", value_type = "numeric")
       PAlfreq <- sql_filter("IN", species, PAlfreq, flag = "-- insert spec",    value_type = "numeric")
       PAlfreq <- sql_filter("IN", region_vec,  PAlfreq, flag = "-- insert region",  value_type = "numeric")
@@ -385,7 +385,7 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
     # ---- fish tickets needed for eras B/D
     PBFTCKT3 <- NULL
     if (start_year <= 2010 && end_year >= 1999) {
-      pb_sql <- sql_reader("fish_ticket2.sql")
+      pb_sql <- sql_reader("fish_ticket_AKFIN.sql")
       pb_sql <- sql_filter("IN", species, pb_sql, flag = "-- insert species", value_type = "character")
       PBFTCKT <- DT(sql_run(con_akfin, pb_sql))
       data.table::setnames(PBFTCKT, toupper(names(PBFTCKT)))
@@ -403,7 +403,7 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
 
     # ---- Era B: 1999–2007
     if (start_year <= 2007 && end_year >= 1999) {
-      PBlfreq <- sql_reader("dom_length_port_B2.sql")
+      PBlfreq <- sql_reader("dom_length_port_B_AKFIN.sql")
       PBlfreq <- sql_filter("IN", species, PBlfreq, flag = "-- insert species", value_type = "numeric")
       PBlfreq <- sql_filter("IN", region_vec,  PBlfreq, flag = "-- insert region",  value_type = "numeric")
 
@@ -472,7 +472,7 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
 
     # ---- Era D: 2008–2010
     if (start_year <= 2010 && end_year >= 2008) {
-      PDlfreq <- sql_reader("dom_length_port_D2.sql")
+      PDlfreq <- sql_reader("dom_length_port_D_AKFIN.sql")
       PDlfreq <- sql_filter("IN", species, PDlfreq, flag = "-- insert species", value_type = "numeric")
       PDlfreq <- sql_filter("IN", region_vec,  PDlfreq, flag = "-- insert region",  value_type = "numeric")
 
@@ -519,7 +519,7 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
 
     # ---- Era C: 2011–present
     if (end_year >= 2011) {
-      PClfreq <- sql_reader("dom_length_port_C2.sql")
+      PClfreq <- sql_reader("dom_length_port_C_AKFIN.sql")
       PClfreq <- sql_filter("IN", species, PClfreq, flag = "-- insert species",             value_type = "numeric")
       PClfreq <- sql_filter("IN", region_vec,  PClfreq, flag = "-- insert region",              value_type = "numeric")
 
@@ -687,7 +687,7 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
   # ------------------------------------------------------------
   # 5) Blend catch -> numbers (AKFIN)
   # ------------------------------------------------------------
-  catch_sql <- sql_reader("dom_catch3.sql")
+  catch_sql <- sql_reader("dom_catch_AKFIN.sql")
   catch_sql <- sql_filter("<=", end_year,   catch_sql, flag = "-- insert eyear", value_type = "numeric")
   catch_sql <- sql_filter(">=", start_year, catch_sql, flag = "-- insert syear", value_type = "numeric")
   catch_sql <- sql_filter("IN", species, catch_sql, flag = "-- insert species", value_type = "character")
@@ -1001,7 +1001,7 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
   } else {
     out <- compute_comps_one(ALL_DATA)
     vcat("Done.")
-    return(wrap_out(out))
+    return(out)
   }
 
 }

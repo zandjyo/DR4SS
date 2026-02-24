@@ -11,7 +11,7 @@ GET_SURVEY_BIOM(con_akfin, area = "BS", species, start_yr)
 
 \item{area}{Character; one of \code{"GOA"}, \code{"AI"}, \code{"BS"}, \code{"SLOPE"}.}
 
-\item{species}{Numeric species code.}
+\item{species}{Numeric observers species code.}
 
 \item{start_yr}{Numeric start year (used in SQL via placeholder \code{-- insert start_year}).}
 }

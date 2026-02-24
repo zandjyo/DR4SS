@@ -4,7 +4,7 @@
 #' optionally aggregates to a single fleet, fills missing years with zeros,
 #' and returns a Stock Synthesis catch table.
 #'
-#' @param con DBI connection to AKFIN.
+#' @param con_akfin DBI connection to AKFIN.
 #' @param final_year Last fishery year to include (used in SQL filter).
 #' @param fsh_sp_label Species label used in catch SQL filter (as used in your SQL).
 #' @param fsh_sp_area Subarea filter used in catch SQL.
@@ -23,7 +23,7 @@
 #'     \item{catch_raw}{data.table of annual catch by YEAR and GEAR1 (post-merge)}
 #'   }
 #' @export
-build_fishery_catch_ss <- function(con,
+build_fishery_catch_ss <- function(con_akfin,
                                    final_year,
                                    fsh_sp_label,
                                    fsh_sp_area,
@@ -72,12 +72,12 @@ build_fishery_catch_ss <- function(con,
   # ---- pull catch from SQL ----
   #sql_code <- sql_read("dom_catch.sql", root_dir = "int/sql")
 
-  sql_code <- sql_reader("dom_catch.sql") 
+  sql_code <- sql_reader("dom_catch_AKFIN.sql") 
   sql_code <- sql_filter(sql_precode = "<=", x = as.numeric(as.character(final_year)),  sql_code = sql_code, flag = "-- insert year", value_type = c("numeric"))
   sql_code <- sql_filter(sql_precode = "IN", x = fsh_sp_label, sql_code = sql_code, flag = "-- insert species_catch", value_type = c("character"))
   sql_code <- sql_filter(sql_precode = "IN", x = fsh_sp_area,  sql_code = sql_code, flag = "-- insert subarea", value_type = c("character"))
 
-  CATCH <- sql_run(con, sql_code) |>
+  CATCH <- sql_run(con_akfin, sql_code) |>
     dplyr::rename_all(toupper) |>
     dplyr::mutate(GEAR1 = gear_harmonize(GEAR)) |>
     dplyr::group_by(YEAR, GEAR1) |>

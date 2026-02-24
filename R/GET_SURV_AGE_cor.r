@@ -30,7 +30,7 @@
 #' @export
 GET_SURV_AGE_cor <- function(con_akfin,
                              area = "BS-NBS",
-                             species = 21720,
+                             species = 202,
                              start_yr = 1977,
                              max_age = 10,
                              extra_csv = NULL,
@@ -62,7 +62,7 @@ GET_SURV_AGE_cor <- function(con_akfin,
 
   # ---- query using packaged SQL template ----
 
-  sql <- sql_reader("survey_age.sql")
+  sql <- sql_reader("survey_age_AKFIN.sql")
   sql <- sql_filter(sql_precode = ">=", x = start_yr, sql_code = sql,
                     flag = "-- insert start_year", value_type = "numeric")
   sql <- sql_filter(sql_precode = "IN", x = species,  sql_code = sql,

@@ -5,7 +5,7 @@
 \title{Build longline survey CPUE (RPN) index for Stock Synthesis}
 \usage{
 build_ll_cpue(
-  con = conn$akfin,
+  con_akfin = conn$akfin,
   ly = 2025,
   srv_sp_str = 21720,
   sp_area = "BSAI",
@@ -16,8 +16,6 @@ build_ll_cpue(
 )
 }
 \arguments{
-\item{con}{DBI connection to AKFIN.}
-
 \item{ly}{Last year to include in the SQL query.}
 
 \item{srv_sp_str}{Survey species code.}
@@ -31,6 +29,8 @@ build_ll_cpue(
 \item{fleet}{Integer SS fleet number to assign to this index (e.g. 3 or 5).}
 
 \item{seas}{Season used in SS CPUE table (default 7).}
+
+\item{con}{DBI connection to AKFIN.}
 }
 \value{
 A data.frame with columns year, seas, index, obs, se_log

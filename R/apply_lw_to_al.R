@@ -70,9 +70,9 @@ AL[, BIN_ID := as.integer(BIN_ID)]
 pred_keys <- c("YEAR","BIN_ID")
 if (gear_mode == "by_gear") pred_keys <- c(pred_keys, "GEAR2")
 if (sex_mode  == "split")  pred_keys <- c(pred_keys, "SEX")
-if ("AREA" %in% lw_fit$kept_terms) pred_keys <- c(pred_keys, "AREA")
-if ("REGION_GRP" %in% lw_fit$kept_terms) pred_keys <- c(pred_keys, "REGION_GRP")
-if ("SEASON" %in% lw_fit$kept_terms) pred_keys <- c(pred_keys, "SEASON")
+if ("AREA" %in% kept) pred_keys <- c(pred_keys, "AREA")
+if ("REGION_GRP" %in% kept) pred_keys <- c(pred_keys, "REGION_GRP")
+if ("SEASON" %in% kept) pred_keys <- c(pred_keys, "SEASON")
 
 # Build a UNIQUE bin-level table for prediction
 pred_dt <- AL[, .(L_BAR = mean(L_BAR, na.rm = TRUE)), by = pred_keys]

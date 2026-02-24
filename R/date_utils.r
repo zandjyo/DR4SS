@@ -57,6 +57,45 @@ WED <- function(x) {
 }
 
 
+#' Compute standardized week-ending date (Saturday) safely
+#'
+#' Robustly coerces a variety of date encodings to `Date` and returns the
+#' corresponding week-ending Saturday, with historical and year-boundary
+#' adjustments.
+#'
+#' The function:
+#' \enumerate{
+#'   \item Safely coerces input `x` to `Date`, supporting:
+#'     \itemize{
+#'       \item Date or POSIXt objects
+#'       \item Numeric encodings (e.g., YYYYMMDD)
+#'       \item Character formats such as "Y-m-d", "m/d/Y", and common
+#'             datetime variants
+#'     }
+#'   \item Computes the next Saturday relative to the input date.
+#'   \item Applies a historical rule: for years prior to 1993,
+#'         the week-ending date is defined as the ceiling week date
+#'         (no Saturday offset).
+#'   \item Prevents cross-year spillover: if the computed week-ending date
+#'         falls in a different calendar year than the input date,
+#'         it is reset to December 31 of the original year.
+#' }
+#'
+#' @param x A vector of dates. Can be `Date`, `POSIXt`, numeric (e.g. YYYYMMDD),
+#'   character, or factor.
+#'
+#' @return A `Date` vector representing the adjusted week-ending Saturday
+#'   for each element of `x`. `NA` values are preserved.
+#'
+#' @details
+#' This function is designed for fisheries data workflows where weekly
+#' aggregations must follow historical conventions and avoid crossing
+#' assessment-year boundaries.
+#'
+#' @seealso \code{\link[lubridate]{ceiling_date}},
+#'   \code{\link[lubridate]{parse_date_time}}
+#'
+#' @export
 WED_safe <- function(x) {
   stopifnot(requireNamespace("data.table", quietly = TRUE))
   stopifnot(requireNamespace("lubridate", quietly = TRUE))

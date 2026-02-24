@@ -14,7 +14,9 @@ predict_age_from_lf(
 }
 \arguments{
 \item{lf_dt}{data.frame/data.table with LENGTH (cm), SEX (M/F/U), MONTH, AREA, YEAR,
-and optionally N (counts). If N missing, assumes 1 per row.}
+and optionally N (counts) and REGION_GRP (user-defined region grouping from region_def).
+If REGION_GRP is present, predictions will use the hierarchical spatial structure
+(REGION + AREA nested within REGION) that was fit in fit_age_predictor().}
 
 \item{predictor}{Object from fit_age_predictor().}
 

@@ -6,7 +6,7 @@
 \usage{
 foreign_length_by_catch(
   con_akfin,
-  species = 202,
+  species,
   for_species_catch = "PACIFIC COD",
   start_year,
   end_year,
@@ -25,7 +25,41 @@ foreign_length_by_catch(
 
 \item{species}{Numeric species code used in the length-frequency query (e.g., 202).}
 
-\item{for_species_catch}{Character species label used in the catch query (e.g., \code{"PACIFIC COD"}).}
+\item{for_species_catch}{Character species label used in the catch query (e.g., \code{"PACIFIC COD"}).
+Must be one of:
+
+ALL FLOUNDERS
+ALL ROCKFISH
+ARROWTOOTH FL
+ATKA MACKEREL
+DEMERSAL RF
+FLATFISH DISC
+FLOUNDER WO YFS
+GREENLAND TURBOT
+HERRING
+JACK DISCARD
+JACK MACKEREL
+OTHER DISCARD
+OTHER FISH
+OTHER RF DISC
+PACIFIC COD
+PACIFIC WHITING
+PELAGIC RF
+POLLOCK
+POP
+POP DISCARDS
+RATTAILS
+ROCK SOLE
+ROCKFISH WO POP
+SABLEFISH
+SABLEFISH DIS
+SHORTBELLY RF
+SLOPE ROCKFISH
+SNAILS
+SQUID
+SS THORNYHEAD
+TURBOTS
+YELLOWFIN SOLE}
 
 \item{start_year, end_year}{Numeric scalar years defining the inclusive year range.}
 

@@ -89,7 +89,7 @@ fishery_ewaa_catch_weighted <- function(
   #  year_min = year_min
   #)
 
-  fish_raw <- get_fishery_age_wt_data(con=con_akfin,
+  fish_raw <- get_fishery_age_wt_data(con_akfin=con_akfin,
                                     species=species,
                                     season_def=season_def,
                                     region_def=region_def,

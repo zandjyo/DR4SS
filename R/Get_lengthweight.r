@@ -25,8 +25,6 @@
 #' }
 #'
 #' @param con_akfin A DBI connection used to run \code{dom_age_wt.sql}.
-#' @param con_afsc Optional DBI connection used to run \code{for_age_wt.sql}.
-#'   If \code{NULL}, foreign data are not included.
 #' @param species Numeric species code (single value).
 #' @param area Character area identifier: one of \code{"BS"}, \code{"AI"}, \code{"GOA"}.
 #' @param K Integer basis dimension for cyclic GAM smooths on week-of-year.
@@ -49,7 +47,6 @@
 #'
 #' @export
 get_lengthweight <- function(con_akfin,
-                             con_afsc = NULL,
                              species = 202,
                              area = "BS",
                              K = 7,
@@ -81,7 +78,7 @@ get_lengthweight <- function(con_akfin,
   )
 
   # ---- Domestic data ----
-  dwt <- sql_reader("dom_age_wt.sql")
+  dwt <- sql_reader("dom_age_wt_AKFIN.sql")
   dwt <- sql_filter("IN", species, dwt, flag = "-- insert species", value_type = "numeric")
   dwt <- sql_filter("IN",location, dwt, flag = "-- insert location", value_type = "numeric")
 
@@ -95,14 +92,15 @@ get_lengthweight <- function(con_akfin,
 
   # ---- Foreign data (optional) ----
   data_for <- NULL
-  if (!is.null(con_afsc)) {
-    fwt <- sql_reader("for_age_wt.sql")
+  
+  if(min_year<1990){
+    fwt <- sql_reader("for_age_wt_AKFIN.sql")
     fwt <- sql_filter("IN", species, fwt, flag = "-- insert species", value_type = "numeric")
     fwt <- sql_filter("IN",location, fwt, flag = "-- insert location", value_type = "numeric")
     
     data_for <- sql_run(con_afsc, fwt) |>
-      data.table::as.data.table() |>
-      dplyr::rename_with(toupper)
+    data.table::as.data.table() |>
+    dplyr::rename_with(toupper)
 
     data_for[, HAUL_OFFLOAD_DATE := DT]
     data_for[, WEIGHT := INDIV_WEIGHT]

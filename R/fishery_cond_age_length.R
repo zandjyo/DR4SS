@@ -70,7 +70,7 @@ fishery_cond_age_length <- function(con_akfin,
   }
   len_bins <- sort(unique(len_bins))
   
-  dt<-get_fishery_age_wt_data(con=con_akfin,
+  dt<-get_fishery_age_wt_data(con_akfin=con_akfin,
                               species = species,
                               season_def = season_def,
                               region_def = region_def,

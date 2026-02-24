@@ -5,7 +5,7 @@
 \title{Pull and prepare fishery age–length–weight observations for composition building}
 \usage{
 get_fishery_age_wt_data(
-  con,
+  con_akfin,
   species,
   season_def,
   region_def,
@@ -17,7 +17,7 @@ get_fishery_age_wt_data(
 )
 }
 \arguments{
-\item{con}{A live DBI connection to AKFIN (or equivalent) used by \code{sql_run()}.}
+\item{con_akfin}{A live DBI connection to AKFIN (or equivalent) used by \code{sql_run()}.}
 
 \item{species}{Species identifier inserted into the SQL query (typically a numeric code).}
 

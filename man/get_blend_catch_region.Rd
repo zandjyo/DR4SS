@@ -2,11 +2,11 @@
 % Please edit documentation in R/get_blend_catch._region.R
 \name{get_blend_catch_region}
 \alias{get_blend_catch_region}
-\title{Pull domestic blend catch (COUNCIL.COMPREHENSIVE_BLEND_CA) for catch weighting}
+\title{Retrieve and aggregate AKFIN blended catch data by user-defined region and season}
 \usage{
 get_blend_catch_region(
   con_akfin,
-  species_group,
+  species,
   region_def,
   season_def,
   start_year,
@@ -15,27 +15,81 @@ get_blend_catch_region(
 )
 }
 \arguments{
-\item{wgoa_cod}{Logical. If TRUE, moves catch from NMFS area 620 west of -158 longitude into the 610 region group}
+\item{con_akfin}{A live DBI connection to the AKFIN database.}
 
-\item{con}{A DBI connection to the COUNCIL/AKFIN Oracle database containing
-COUNCIL.COMPREHENSIVE_BLEND_CA.}
+\item{species}{Character vector of species codes or species group identifiers
+to filter in the SQL query.}
 
-\item{species}{Species group code(s) for \code{SPECIES_GROUP_CODE} (numeric/integer).}
+\item{region_def}{A \strong{named list} defining region groupings. Each list
+element name is the region label, and each value is a vector of NMFS
+AREA codes assigned to that region.
+\cr
+Example:
+\code{list(BS = 500:539,
+             WGOA = c(610, 620),
+             CGOA = c(630, 640))}}
 
-\item{subarea}{One or more FMP subarea values for \code{FMP_SUBAREA} (often character like "BS").}
+\item{season_def}{Optional \strong{named list} defining seasonal groupings of
+months (1–12). Each name defines a season label and each value is a
+vector of months assigned to that season.
+\cr
+Example:
+\code{list(A = 1:3, B = 4:6, C = 7:9, D = 10:12)}
+\cr
+Months not included in \code{season_def} are dropped from seasonal outputs.}
 
-\item{year_max}{Maximum year to include (inclusive).}
+\item{start_year}{Integer. First year (inclusive) to include in the query.}
 
-\item{year_min}{Optional minimum year to include (inclusive). Default NULL (no lower bound).}
+\item{end_year}{Integer. Last year (inclusive) to include in the query.}
 
-\item{sql_file}{Name of the SQL file bundled with the package.}
+\item{wgoa_cod}{Logical. If TRUE, applies special handling for WGOA Pacific cod,
+reassigning certain AREA 620 records (based on ADFG_AREA) to match AREA 610
+regional grouping.}
 }
 \value{
-A data.table with (at minimum) columns:
-YEAR, MONTH_WED, GEAR, TONS, RETAINED_OR_DISCARDED, SPECIES, AREA, SOURCE.
+A \code{data.table} containing blended catch data with standardized
+and grouped fields, including:
+\describe{
+\item{YEAR}{Calendar year}
+\item{MONTH_WED}{Month of week-ending date (1–12)}
+\item{SEASON}{User-defined season factor (if provided)}
+\item{AREA}{NMFS area code}
+\item{REGION_GRP}{User-defined region grouping}
+\item{GEAR}{Gear code (uppercase)}
+\item{TONS}{Catch in metric tons}
+\item{SPECIES}{Species code}
+\item{SOURCE}{Data source flag from AKFIN}
+}
 }
 \description{
-Runs the packaged blend-catch SQL (COMPREHENSIVE_BLEND_CA) and returns catch
-aggregated by YEAR x MONTH_WED x GEAR (and other fields included in the SQL).
-This is typically used to build quarterly catch proportions for catch-weighted EWAA.
+Queries AKFIN domestic catch data using a parameterized SQL template and
+returns catch data aggregated and grouped according to user-defined
+region and season definitions.
+}
+\details{
+Regions and seasons are defined externally by the user via named lists,
+allowing flexible grouping of NMFS areas and calendar months for
+assessment workflows.
+
+The function:
+\enumerate{
+\item Validates and sanitizes \code{region_def} to ensure that:
+\itemize{
+\item It is a named list
+\item AREA codes are numeric and non-overlapping
+\item Each AREA is assigned to only one region
+}
+\item Validates and applies \code{season_def}, assigning a SEASON factor
+based on MONTH_WED.
+\item Dynamically injects AREA, species, and year filters into a packaged
+SQL template (\code{dom_catch_AKFIN.sql}).
+\item Executes the query and standardizes returned column names and types.
+\item Applies region grouping and optional WGOA Pacific cod reassignment logic.
+}
+
+This function is designed for stock assessment and inseason monitoring
+workflows requiring flexible spatial and seasonal aggregation.
+}
+\seealso{
+\code{\link{sql_filter}}, \code{\link{sql_run}}
 }

@@ -31,6 +31,41 @@
 #'   \code{sql_run()}.
 #' @param species Numeric species code used in the length-frequency query (e.g., 202).
 #' @param for_species_catch Character species label used in the catch query (e.g., \code{"PACIFIC COD"}).
+#' Must be one of: 
+#' 
+#' ALL FLOUNDERS
+#' ALL ROCKFISH
+#' ARROWTOOTH FL
+#' ATKA MACKEREL
+#' DEMERSAL RF
+#' FLATFISH DISC
+#' FLOUNDER WO YFS
+#' GREENLAND TURBOT
+#' HERRING
+#' JACK DISCARD
+#' JACK MACKEREL
+#' OTHER DISCARD
+#' OTHER FISH
+#' OTHER RF DISC
+#' PACIFIC COD
+#' PACIFIC WHITING
+#' PELAGIC RF
+#' POLLOCK
+#' POP
+#' POP DISCARDS
+#' RATTAILS
+#' ROCK SOLE
+#' ROCKFISH WO POP
+#' SABLEFISH
+#' SABLEFISH DIS
+#' SHORTBELLY RF
+#' SLOPE ROCKFISH
+#' SNAILS
+#' SQUID
+#' SS THORNYHEAD
+#' TURBOTS
+#' YELLOWFIN SOLE
+#' 
 #' @param start_year,end_year Numeric scalar years defining the inclusive year range.
 #' @param SEX Logical; if \code{TRUE}, keep sex-specific compositions (expects a \code{SEX} column).
 #'   If \code{FALSE}, sexes are pooled.
@@ -59,7 +94,7 @@
 #'
 #' @export
 foreign_length_by_catch <- function(con_akfin,
-                                  species =202,
+                                  species,
                                   for_species_catch ="PACIFIC COD",
                                   start_year,
                                   end_year,
@@ -224,7 +259,7 @@ if (!requireNamespace("data.table", quietly = TRUE)) stop("data.table required."
 
 
   # ---- Pull foreign length/species-comp (AFSC) ----
-  Flfreq <- sql_reader("for_length2.sql")
+  Flfreq <- sql_reader("for_length_AKFIN.sql")
 
   Flfreq <- sql_filter(sql_precode = "IN", x = species, sql_code = Flfreq, flag = "-- insert species",value_type = c("numeric"))
   Flfreq <- sql_filter(sql_precode ="IN", x = region_vec, sql_code = Flfreq, flag = "-- insert region",value_type = c("numeric"))
@@ -330,7 +365,7 @@ if (!requireNamespace("data.table", quietly = TRUE)) stop("data.table required."
  #   if (sp_area == "AI") "LIKE '%ALEUTIANS%'" else
  #     "IN ('KODIAK','YAKUTAT', 'SHUMAGIN','S.E. ALASKA', 'SHELIKOF STR.','CHIRIKOF')"
 
-  fcatch <- sql_reader("for_catch2.sql")
+  fcatch <- sql_reader("for_catch_AKFIN.sql")
   fcatch <- sql_filter("IN", for_species_catch, fcatch, flag = "-- insert species_catch",value_type = c("character"))
   fcatch <- sql_filter(">=", start_year, fcatch, flag = "-- insert syear",value_type = c("numeric"))
   fcatch <- sql_filter("<=", end_year, fcatch, flag = "-- insert eyear",value_type = c("numeric"))

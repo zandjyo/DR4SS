@@ -5,15 +5,15 @@
 \title{Pull domestic blend catch (COUNCIL.COMPREHENSIVE_BLEND_CA) for catch weighting}
 \usage{
 get_blend_catch(
-  con,
+  con_akfin,
   species_group,
   subarea,
   year_max,
-  sql_file = "dom_catch_table.sql"
+  sql_file = "dom_catch_table_AKFIN.sql"
 )
 }
 \arguments{
-\item{con}{A DBI connection to the COUNCIL/AKFIN Oracle database containing
+\item{con_akfin}{A DBI connection to the COUNCIL/AKFIN Oracle database containing
 COUNCIL.COMPREHENSIVE_BLEND_CA.}
 
 \item{subarea}{One or more FMP subarea values for \code{FMP_SUBAREA} (often character like "BS").}
@@ -22,7 +22,7 @@ COUNCIL.COMPREHENSIVE_BLEND_CA.}
 
 \item{sql_file}{Name of the SQL file bundled with the package.}
 
-\item{species}{Species group code(s) for \code{SPECIES_GROUP_CODE} (numeric/integer).}
+\item{species}{Observer species code.}
 
 \item{year_min}{Optional minimum year to include (inclusive). Default NULL (no lower bound).}
 }

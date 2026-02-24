@@ -7,7 +7,7 @@
 GET_SURV_AGE_cor(
   con_akfin,
   area = "BS-NBS",
-  species = 21720,
+  species = 202,
   start_yr = 1977,
   max_age = 10,
   extra_csv = NULL,

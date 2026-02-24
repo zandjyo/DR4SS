@@ -14,6 +14,7 @@ LENGTH_AGE_BY_CATCH(
   PORT = TRUE,
   age_length = c("LENGTH", "AGE"),
   map_sample = c("MAP", "sample"),
+  n_samples = 1,
   max_length = NULL,
   max_age = 12L,
   max_wt = 50L,
@@ -22,7 +23,8 @@ LENGTH_AGE_BY_CATCH(
   season_def = NULL,
   region_def = NULL,
   drop_unmapped = TRUE,
-  wgoa_cod = TRUE
+  wgoa_cod = TRUE,
+  return_predictor = FALSE
 )
 }
 \arguments{
@@ -46,6 +48,8 @@ age-predictor helper functions.}
 
 \item{map_sample}{"MAP" or "sample" used by predict_age_from_lf() when returning integer ages.}
 
+\item{n_samples}{for age composition if "sample" enter the number of samples you wish to produce, output becomes a list}
+
 \item{max_length}{Optional numeric. If provided, drop rows in ALL_DATA with LENGTH > max_length
 (applied before AGE prediction, so it affects the predictor inputs too).}
 
@@ -66,6 +70,8 @@ If NULL, a single REGION_GRP is used (equal to \code{sp_area}) and default area 
 to a REGION_GRP. Default TRUE.}
 
 \item{wgoa_cod}{Logical. If TRUE, moves catch from NMFS area 620 west of -158 longitude into the 610 region group}
+
+\item{return_predictor}{Logical. if TRUE returns age at length predictor model in list}
 
 \item{season_month}{Which month column to use for season mapping: "MONTH" or "MONTH_WED".
 Default "MONTH".}
