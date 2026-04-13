@@ -188,7 +188,7 @@ add_region_group <- function(dt, region_def, area_col = "AREA", drop_unmapped = 
   
   sql_code <- sql_filter(
     sql_precode  = "IN",
-    x            = vals,
+    x            = region_vec,
     sql_code     = sql_code,
     flag         = "-- insert area",
     value_type   = "character"

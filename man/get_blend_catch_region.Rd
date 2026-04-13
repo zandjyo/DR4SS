@@ -17,7 +17,7 @@ get_blend_catch_region(
 \arguments{
 \item{con_akfin}{A live DBI connection to the AKFIN database.}
 
-\item{species}{Character vector of species codes or species group identifiers
+\item{species}{Numeric vector of observer species codes
 to filter in the SQL query.}
 
 \item{region_def}{A \strong{named list} defining region groupings. Each list
