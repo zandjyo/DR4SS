@@ -177,7 +177,7 @@ add_region_group <- function(dt, region_def, area_col = "AREA", drop_unmapped = 
            paste(sort(unique(dup)), collapse = ", "), call. = FALSE)
     }
     region_def <- reg_clean
-    region_vec <- sort(unique(all_areas))
+    region_vec <- as.character(sort(unique(all_areas)))
     region_levels <- nm
 
  
@@ -188,10 +188,10 @@ add_region_group <- function(dt, region_def, area_col = "AREA", drop_unmapped = 
   
   sql_code <- sql_filter(
     sql_precode  = "IN",
-    x            = region_vec,
+    x            = vals,
     sql_code     = sql_code,
     flag         = "-- insert area",
-    value_type   = "numeric"
+    value_type   = "character"
   )
 
   # years: use <= year_max 
