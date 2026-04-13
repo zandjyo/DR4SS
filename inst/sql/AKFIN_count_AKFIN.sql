@@ -5,7 +5,7 @@ SELECT
 FROM
     akr.species_translation
     INNER JOIN gap_products.akfin_length_v ON akr.species_translation.from_code = gap_products.akfin_length_v.species_code
-    INNER JOIN gap_products.akfin_length_v ON gap_products.akfin_cruise.cruisejoin = gap_products.akfin_length_v.cruisejoin
+    INNER JOIN gap_products.akfin_cruise ON gap_products.akfin_cruise.cruisejoin = gap_products.akfin_length_v.cruisejoin
 WHERE
     akr.species_translation.to_code 
     -- insert species

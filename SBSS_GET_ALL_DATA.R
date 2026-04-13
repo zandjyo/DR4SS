@@ -121,7 +121,7 @@ SBSS_GET_ALL_DATA <- function(
   old_obj <- if (exists("OLD_SEAS_GEAR_CATCH", inherits = TRUE)) get("OLD_SEAS_GEAR_CATCH", inherits = TRUE) else NULL
 
   catch_res <- build_fishery_catch_ss(
-    con                 = conn$akfin,
+    con_akfin           = conn$akfin,
     final_year          = ly,
     fsh_sp_label        = fsh_sp_label,
     fsh_sp_area         = area,
@@ -222,20 +222,43 @@ data.table::setorder(CPUE, year)
   print("Survey LCOMP done")
 
 # ---- 5) Fishery catch-weighted length comps ----
-  fsh_lcomp <- NULL
+  dom_fsh_lcomp <- NULL
+  for_fsh_lcomp <- NULL
+
   if (isTRUE(do_fsh_lcomp)) {
-    fsh_lcomp <- LENGTH_BY_CATCH_short(
-      con_akfin          = con_akfin,
-      con_afsc           = con_afsc,
-      species            = fsh_species,
-      species_catch      = fsh_species_catch,
-      for_species_catch  = for_species_catch,
-      sp_area            = area,
-      ly                 = ly,
-      SEX                = fsh_lcomp_sex,
-      PORT               = fsh_lcomp_port,
-      use_foreign        = use_foreign
-    )
+    dom_fsh_lcomp <- LENGTH_AGE_BY_CATCH(
+      con_akfin=con_akfin, 
+      species=fsh_species, 
+      sp_area="ALL", 
+      start_year=start_year, 
+      end_year=end_year,
+      SEX=fsh_lcomp_sex, 
+      PORT=fsh_lcomp_port,
+      max_length=200,
+      max_age = max_age,
+      age_length="LENGTH",
+      map_sample = c("MAP"),
+      season_def = season_q,
+      region_def = region_q ,
+      drop_unmapped = TRUE,
+      wgoa_cod=wgoa_cod
+  )
+if(isTRUE(use_foriegn)){
+ for_fsh_lcomp<-foreign_length_by_catch(
+      con_akfin=con_akfin,
+      species =species,
+      for_species_catch = fsh_species_catch,
+      start_year=1977,
+      end_year= 1989,
+      SEX = fsh_lcomp_sex,
+      season_def = season_def,
+      region_def = region_def,
+      drop_unmapped = TRUE,
+      wgoa_cod = TRUE,
+      verbose = TRUE
+      )
+
+      
   }
 
 if(one_fleet){

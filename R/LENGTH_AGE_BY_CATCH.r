@@ -35,6 +35,12 @@
 #' 6) Compute hierarchical weights and produce compositions (optionally by season
 #'    and/or user-defined region group).
 #'
+#' Sex handling:
+#' If `SEX=TRUE`, unknown sex observations (`SEX==3`) are split 50:50 between
+#' females (`SEX==1`) and males (`SEX==2`). Final frequencies are normalized
+#' across both sexes combined within each composition stratum, so the full set of
+#' female + male bins sums to 1.
+#'
 #' @param con_akfin DBI connection to AKFIN.
 #' @param species Numeric observer species code used in observer/port length SQL.
 #' @param sp_area Stock assessment area code: "BS","AI","GOA","BSWGOA".
@@ -46,7 +52,7 @@
 #' @param PORT Logical. If TRUE, include port sampling data when available.
 #' @param age_length "LENGTH" or "AGE". If "AGE", lengths are converted to predicted ages.
 #' @param map_sample "MAP" or "sample" used by predict_age_from_lf() when returning integer ages.
-#' @param n_samples for age composition if "sample" enter the number of samples you wish to produce, output becomes a list 
+#' @param n_samples for age composition if "sample" enter the number of samples you wish to produce, output becomes a list
 #' @param max_length Optional numeric. If provided, drop rows in ALL_DATA with LENGTH > max_length
 #'   (applied before AGE prediction, so it affects the predictor inputs too).
 #' @param max_age Plus-group maximum age (used when age_length="AGE").
@@ -54,14 +60,12 @@
 #' @param seed RNG seed when sampling (used when age_length="AGE").
 #' @param season_def Optional named list mapping season labels to month integers (1..12),
 #'   e.g. list(A=1:3,B=4:6,C=7:9,D=10:12) or list(A=1:6,B=7:12).
-#' @param season_month Which month column to use for season mapping: "MONTH" or "MONTH_WED".
-#'   Default "MONTH".
 #' @param region_def Optional named list mapping REGION_GRP labels to AREA codes, e.g.
-#'   listlist(BS=c(500:539),WGOA=c(610),CGOA=c(620:649),EGOA=650:659),AI=c(541:544)). If provided, outputs are by REGION_GRP.
+#'   list(BS=c(500:539),WGOA=c(610),CGOA=c(620:649),EGOA=650:659,AI=c(541:544)). If provided, outputs are by REGION_GRP.
 #'   If NULL, a single REGION_GRP is used (equal to `sp_area`) and default area filtering is used.
 #' @param drop_unmapped Logical. If TRUE and region_def is provided, drop rows whose AREA does not map
 #'   to a REGION_GRP. Default TRUE.
-#' @param wgoa_cod Logical. If TRUE, moves catch from NMFS area 620 west of -158 longitude into the 610 region group 
+#' @param wgoa_cod Logical. If TRUE, moves catch from NMFS area 620 west of -158 longitude into the 610 region group
 #' @param return_predictor Logical. if TRUE returns age at length predictor model in list
 #' @return A list with two elements:
 #' \describe{
@@ -88,7 +92,7 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
                                 season_def = NULL,
                                 region_def = NULL,
                                 drop_unmapped = TRUE,
-                                wgoa_cod =TRUE,
+                                wgoa_cod = TRUE,
                                 return_predictor = FALSE) {
 
   age_length <- match.arg(age_length)
@@ -102,7 +106,7 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
 
   # ---- basic checks ----
   if (is.null(con_akfin)) stop("`con_akfin` is required.", call. = FALSE)
-  
+
   if (!is.numeric(species) || length(species) != 1L) stop("`species` must be a single numeric code.", call. = FALSE)
   if (!is.numeric(start_year) || length(start_year) != 1L) stop("`start_year` must be a single year.", call. = FALSE)
   if (start_year < 1990) stop("`start_year` must be >= 1990.", call. = FALSE)
@@ -117,7 +121,7 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
   n_samples <- as.integer(n_samples)
   if (!is.finite(n_samples) || n_samples < 1L) stop("`n_samples` must be >= 1.", call. = FALSE)
 
-  do_samples <- identical(map_sample, "sample") && n_samples > 1L && identical(age_length,"AGE")
+  do_samples <- identical(map_sample, "sample") && n_samples > 1L && identical(age_length, "AGE")
 
   sp_area <- toupper(sp_area)
 
@@ -128,7 +132,7 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
     "GOA"    = 600:699,
     "BS"     = 500:539,
     "BSWGOA" = c(500:539, 610, 620),
-    "ALL" = c(500:699),
+    "ALL"    = c(500:699),
     stop("Invalid `sp_area` (use BS, AI, GOA, BSWGOA,ALL).", call. = FALSE)
   )
 
@@ -169,7 +173,7 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
       message(label, ": 0 rows")
       return(invisible(NULL))
     }
-    tmp <- dt[, .(N = sum(get(col), na.rm = TRUE)), by = .(YEAR,REGION_GRP)][order(YEAR)]
+    tmp <- dt[, .(N = sum(get(col), na.rm = TRUE)), by = .(YEAR, REGION_GRP)][order(YEAR)]
     message(label, " (sum ", col, " by YEAR):")
     print(tmp)
     invisible(NULL)
@@ -256,7 +260,6 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
       return(dt)
     }
 
-    # Build lookup table AREA -> REGION_GRP
     key <- data.table::rbindlist(
       lapply(names(region_def), function(nm) data.table::data.table(REGION_GRP = nm, AREA_KEY = region_def[[nm]])),
       use.names = TRUE
@@ -270,25 +273,65 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
     dt
   }
 
+  split_unsexed_5050 <- function(dt,
+                                 sex_col = "SEX",
+                                 female_code = 1L,
+                                 male_code   = 2L,
+                                 unsex_code  = 3L,
+                                 split_cols  = c("SUM_FREQUENCY","YAGMH_SNUM","YAGMH_STONS")) {
+    dt <- data.table::as.data.table(dt)
+
+    if (!sex_col %in% names(dt)) {
+      dt[, (sex_col) := unsex_code]
+    }
+
+    if (is.character(dt[[sex_col]]) || is.factor(dt[[sex_col]])) {
+      sx <- toupper(trimws(as.character(dt[[sex_col]])))
+      out <- rep(NA_integer_, length(sx))
+      out[sx %in% c("F","FEMALE","1")] <- female_code
+      out[sx %in% c("M","MALE","2")]   <- male_code
+      out[sx %in% c("U","UNK","UN","3","UNKNOWN","UNSEXED","UNSEX")] <- unsex_code
+      dt[, (sex_col) := out]
+    } else {
+      dt[, (sex_col) := suppressWarnings(as.integer(as.character(get(sex_col))))]
+    }
+
+    is_u <- is.na(dt[[sex_col]]) | dt[[sex_col]] == unsex_code
+    if (!any(is_u)) return(dt)
+
+    sexed <- dt[!is_u]
+    u <- dt[is_u]
+
+    uF <- data.table::copy(u); uF[, (sex_col) := female_code]
+    uM <- data.table::copy(u); uM[, (sex_col) := male_code]
+
+    for (cc in intersect(split_cols, names(dt))) {
+      uF[, (cc) := as.numeric(get(cc)) * 0.5]
+      uM[, (cc) := as.numeric(get(cc)) * 0.5]
+    }
+
+    data.table::rbindlist(list(sexed, uF, uM), use.names = TRUE, fill = TRUE)
+  }
+
   # ------------------------------------------------------------
   # 1) Observer lengths (AKFIN)
   # ------------------------------------------------------------
   lfreq <- sql_reader("dom_length_AKFIN.sql")
   lfreq <- sql_filter("IN", species, lfreq, flag = "-- insert species", value_type = "numeric")
   lfreq <- sql_filter("IN", species, lfreq, flag = "-- insert spec",    value_type = "numeric")
-  lfreq <- sql_filter("IN", region_vec,  lfreq, flag = "-- insert region",  value_type = "numeric")
-  lfreq <- sql_filter("<=", end_year, lfreq, flag = "-- insert end",    value_type = "numeric")
-  lfreq <- sql_filter(">=", start_year, lfreq, flag = "-- insert start",value_type = "numeric")
+  lfreq <- sql_filter("IN", region_vec, lfreq, flag = "-- insert region", value_type = "numeric")
+  lfreq <- sql_filter("<=", end_year, lfreq, flag = "-- insert end", value_type = "numeric")
+  lfreq <- sql_filter(">=", start_year, lfreq, flag = "-- insert start", value_type = "numeric")
 
   Dspcomp <- DT(sql_run(con_akfin, lfreq))
   data.table::setnames(Dspcomp, toupper(names(Dspcomp)))
   Dspcomp <- Dspcomp[EXTRAPOLATED_WEIGHT > 0 & NUMB > 0]
 
-  if(isTRUE(wgoa_cod)){Dspcomp[AREA == 620 & LONDD_END <= -158 ]$AREA <- 610} ## moving the WGOA line in 610 to -158.
-  
-  # WED/MONTH_WED derived from HDAY (assumes WED() exists in your namespace)
+  if (isTRUE(wgoa_cod)) {
+    Dspcomp[AREA == 620 & LONDD_END <= -158]$AREA <- 610
+  }
 
- # robust parse of HDAY into a true Date (NOT week-ending yet)
+  # WED/MONTH_WED derived from HDAY
   Dspcomp[, HDAY_DATE := as.Date(lubridate::parse_date_time(
     trimws(as.character(HDAY)),
     orders = c("Y-m-d","Y/m/d","Ymd","m/d/Y","m-d-Y","Ymd HMS","Y-m-d H:M:S"),
@@ -299,9 +342,7 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
   if (bad > 0 && isTRUE(verbose)) message("Dropping ", bad, " rows with unparseable HDAY.")
   Dspcomp <- Dspcomp[!is.na(HDAY_DATE)]
 
-  # now compute WED safely
   Dspcomp[, WED := WED_safe(HDAY_DATE)]
-
   Dspcomp[, MONTH_WED := lubridate::month(WED)]
   Dspcomp[, MONTH := as.integer(as.character(MONTH))]
   Dspcomp[, QUARTER := 4L]
@@ -319,7 +360,7 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
   summarize_by_year(OBS_DATA, "Observer length data", col = "SUM_FREQUENCY")
 
   # ------------------------------------------------------------
-  # 2) AVEWT lookup tables from observer data (still based on AREA2/month/gear)
+  # 2) AVEWT lookup tables from observer data
   # ------------------------------------------------------------
   Tspcomp <- DT(Dspcomp)
 
@@ -350,7 +391,7 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
   )
 
   # ------------------------------------------------------------
-  # 3) Optional PORT data (AKFIN + AKFIN fish tickets + fuzzy_dates)
+  # 3) Optional PORT data
   # ------------------------------------------------------------
   port_list <- list()
 
@@ -360,8 +401,8 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
     if (start_year <= 1998) {
       PAlfreq <- sql_reader("dom_length_port_A_AKFIN.sql")
       PAlfreq <- sql_filter("IN", species, PAlfreq, flag = "-- insert species", value_type = "numeric")
-      PAlfreq <- sql_filter("IN", species, PAlfreq, flag = "-- insert spec",    value_type = "numeric")
-      PAlfreq <- sql_filter("IN", region_vec,  PAlfreq, flag = "-- insert region",  value_type = "numeric")
+      PAlfreq <- sql_filter("IN", species, PAlfreq, flag = "-- insert spec", value_type = "numeric")
+      PAlfreq <- sql_filter("IN", region_vec, PAlfreq, flag = "-- insert region", value_type = "numeric")
 
       PAD <- DT(sql_run(con_akfin, PAlfreq))
       data.table::setnames(PAD, toupper(names(PAD)))
@@ -374,7 +415,7 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
 
       PORTAL <- PAD[, .(SPECIES, YEAR, GEAR, AREA2, AREA, MONTH, QUARTER,
                         MONTH_WED = MONTH,
-                        CRUISE, PERMIT,VES_AKR_ADFG, HAUL_JOIN, SEX, LENGTH,
+                        CRUISE, PERMIT, VES_AKR_ADFG, HAUL_JOIN, SEX, LENGTH,
                         SUM_FREQUENCY, EXTRAPOLATED_WEIGHT, NUMB, SOURCE)]
       PORTAL <- PORTAL[YEAR >= start_year & YEAR <= end_year]
       PORTAL <- add_region_group(PORTAL, region_def = region_def, area_col = "AREA", drop_unmapped = drop_unmapped)
@@ -405,7 +446,7 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
     if (start_year <= 2007 && end_year >= 1999) {
       PBlfreq <- sql_reader("dom_length_port_B_AKFIN.sql")
       PBlfreq <- sql_filter("IN", species, PBlfreq, flag = "-- insert species", value_type = "numeric")
-      PBlfreq <- sql_filter("IN", region_vec,  PBlfreq, flag = "-- insert region",  value_type = "numeric")
+      PBlfreq <- sql_filter("IN", region_vec, PBlfreq, flag = "-- insert region", value_type = "numeric")
 
       PBLFREQ <- DT(sql_run(con_akfin, PBlfreq))
       data.table::setnames(PBLFREQ, toupper(names(PBLFREQ)))
@@ -415,12 +456,9 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
         PBFTCKT3[, DELIVERY_DATE := format(as.Date(DELIVERY_DATE, format = "%Y%m%d", origin = "1970-01-01"))]
       }
 
-
       PBCOMB <- merge(PBLFREQ, PBFTCKT3, by = c("DELIVERY_DATE","DELIVERING_VESSEL","FISH_TICKET_NO"), all.x = TRUE)
 
       na_block <- DT(PBCOMB[is.na(TONS), 1:ncol(PBLFREQ)])
-      #data.table::setnames(na_block, names(PBLFREQ))
-
       ok_block <- PBCOMB[!is.na(TONS)]
 
       if (nrow(na_block) > 0) {
@@ -431,7 +469,7 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
         PBCOMB_all <- ok_block
       }
 
-      if(nrow(PBCOMB_all) > 0){
+      if (nrow(PBCOMB_all) > 0) {
         PBCOMB_all[, MONTH := as.integer(lubridate::month(DELIVERY_DATE))]
         PBCOMB_all[, QUARTER := 4L]
         PBCOMB_all[MONTH < 3, QUARTER := 1L]
@@ -451,7 +489,7 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
             list(table = YG_AVWT,   by = c("YEAR","GEAR"))
           ),
           priority = c("YAGM_AVE_WT","YAM_AVE_WT","YGQ_AVE_WT","YGM_AVE_WT","YGQ_AVE_WT","YG_AVE_WT")
-       )
+        )
 
         PBCOMB_all[, NUMB := PBCOMB5$TONS_LANDED / (PBCOMB5$AVEWT / 1000)]
         data.table::setnames(PBCOMB_all, "DELIVERING_VESSEL", "VES_AKR_ADFG")
@@ -464,17 +502,18 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
         PORTBL <- PORTBL[YEAR >= start_year & YEAR <= end_year]
         PORTBL <- add_region_group(PORTBL, region_def = region_def, area_col = "AREA", drop_unmapped = drop_unmapped)
         summarize_by_year(PORTBL, "Port length data 1999–2007", col = "SUM_FREQUENCY")
-        } else { PORTBL <- NULL}
+      } else {
+        PORTBL <- NULL
+      }
 
       port_list[["PORTBL"]] <- PORTBL
-      
     }
 
     # ---- Era D: 2008–2010
     if (start_year <= 2010 && end_year >= 2008) {
       PDlfreq <- sql_reader("dom_length_port_D_AKFIN.sql")
       PDlfreq <- sql_filter("IN", species, PDlfreq, flag = "-- insert species", value_type = "numeric")
-      PDlfreq <- sql_filter("IN", region_vec,  PDlfreq, flag = "-- insert region",  value_type = "numeric")
+      PDlfreq <- sql_filter("IN", region_vec, PDlfreq, flag = "-- insert region", value_type = "numeric")
 
       PDLFREQ <- DT(sql_run(con_akfin, PDlfreq))
       data.table::setnames(PDLFREQ, toupper(names(PDLFREQ)))
@@ -509,7 +548,7 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
 
       PORTDL <- PDCOMB[, .(SPECIES, YEAR, GEAR, AREA2, AREA, MONTH, QUARTER,
                            MONTH_WED = MONTH,
-                           CRUISE, PERMIT,VES_AKR_ADFG, HAUL_JOIN, SEX, LENGTH,
+                           CRUISE, PERMIT, VES_AKR_ADFG, HAUL_JOIN, SEX, LENGTH,
                            SUM_FREQUENCY, EXTRAPOLATED_WEIGHT, NUMB, SOURCE)]
       PORTDL <- PORTDL[YEAR >= start_year & YEAR <= end_year]
       PORTDL <- add_region_group(PORTDL, region_def = region_def, area_col = "AREA", drop_unmapped = drop_unmapped)
@@ -520,8 +559,8 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
     # ---- Era C: 2011–present
     if (end_year >= 2011) {
       PClfreq <- sql_reader("dom_length_port_C_AKFIN.sql")
-      PClfreq <- sql_filter("IN", species, PClfreq, flag = "-- insert species",             value_type = "numeric")
-      PClfreq <- sql_filter("IN", region_vec,  PClfreq, flag = "-- insert region",              value_type = "numeric")
+      PClfreq <- sql_filter("IN", species, PClfreq, flag = "-- insert species", value_type = "numeric")
+      PClfreq <- sql_filter("IN", region_vec, PClfreq, flag = "-- insert region", value_type = "numeric")
 
       PCD <- DT(sql_run(con_akfin, PClfreq))
       data.table::setnames(PCD, toupper(names(PCD)))
@@ -537,7 +576,7 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
 
       PORTCL <- PCD[, .(SPECIES, YEAR, GEAR, AREA2, AREA, MONTH, QUARTER,
                         MONTH_WED = MONTH,
-                        CRUISE, PERMIT,VES_AKR_ADFG, HAUL_JOIN, SEX, LENGTH,
+                        CRUISE, PERMIT, VES_AKR_ADFG, HAUL_JOIN, SEX, LENGTH,
                         SUM_FREQUENCY, EXTRAPOLATED_WEIGHT, NUMB, SOURCE)]
       PORTCL <- PORTCL[YEAR >= start_year & YEAR <= end_year]
       PORTCL <- add_region_group(PORTCL, region_def = region_def, area_col = "AREA", drop_unmapped = drop_unmapped)
@@ -557,7 +596,7 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
   if (nrow(ALL_DATA) == 0) stop("No fishery length data available for this request.", call. = FALSE)
 
   # ------------------------------------------------------------
-  # 3b) Optional max_length filter on ALL_DATA (pre-AGE QC)
+  # 3b) Optional max_length filter on ALL_DATA
   # ------------------------------------------------------------
   if (!is.null(max_length)) {
     before_n <- nrow(ALL_DATA)
@@ -567,13 +606,12 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
     if (after_n == 0) stop("After applying `max_length`, ALL_DATA has 0 rows.", call. = FALSE)
   }
 
-
   # ------------------------------------------------------------
   # 4) If AGE, build predictor and convert LENGTH -> AGE_HAT in bulk
   # ------------------------------------------------------------
   if (age_length == "AGE") {
 
-    if(!is.null(region_def)){ sp_area <- "ALL"}
+    if (!is.null(region_def)) sp_area <- "ALL"
 
     srv_age <- GET_SURV_AGE(
       con_akfin = con_akfin,
@@ -585,8 +623,6 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
     srv_age <- DT(srv_age)
     if (nrow(srv_age) == 0) stop("No survey age data available for this area/date range.", call. = FALSE)
 
-    
-
     srv_age <- add_nmfs_area_to_survey(
       survey_dt = srv_age,
       lon_col   = "LONGITUDE_DD_END",
@@ -594,37 +630,35 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
       join      = "within"
     )
 
-   
-    #srv_age<-srv_age[NMFS_AREA %in% all_areas]
+    srv_age <- add_region_group(srv_age, region_def = region_def, area_col = "NMFS_AREA", drop_unmapped = drop_unmapped)
 
-    srv_age<-add_region_group(srv_age, region_def = region_def, area_col = "NMFS_AREA", drop_unmapped = drop_unmapped)
-
-    if(isTRUE(wgoa_cod)){srv_age[NMFS_AREA==620 & LONGITUDE_DD_END <= -158]$NMFS_AREA <- 610} ## for WGOA Pcod
+    if (isTRUE(wgoa_cod)) {
+      srv_age[NMFS_AREA == 620 & LONGITUDE_DD_END <= -158]$NMFS_AREA <- 610
+    }
 
     if (isTRUE(verbose)) {
       message("Survey ages (rows with non-missing AGE by YEAR):")
-      print(srv_age[!is.na(AGE), .(N = .N), by = .(YEAR,REGION_GRP)][order(YEAR)])
+      print(srv_age[!is.na(AGE), .(N = .N), by = .(YEAR, REGION_GRP)][order(YEAR)])
     }
-    
 
     fish_raw <- get_fishery_age_wt_data(
-                  con=con_akfin,
-                  species=species,
-                  season_def=season_def,
-                  region_def = region_def,
-                  start_year = start_year,
-                  end_year = end_year,
-                  wgoa_cod=wgoa_cod,
-                  max_wt=50,
-                  drop_unmapped=drop_unmapped
+      con = con_akfin,
+      species = species,
+      season_def = season_def,
+      region_def = region_def,
+      start_year = start_year,
+      end_year = end_year,
+      wgoa_cod = wgoa_cod,
+      max_wt = 50,
+      drop_unmapped = drop_unmapped
     )
     fish_raw <- DT(fish_raw)
-    
+
     if (nrow(fish_raw[!is.na(AGE)]) == 0) stop("No fishery age data available for age predictor.", call. = FALSE)
 
     if (isTRUE(verbose)) {
       message("Fishery ages (rows with non-missing AGE by YEAR):")
-      print(fish_raw[!is.na(AGE), .(N = .N), by = .(YEAR,REGION_GRP)][order(YEAR)])
+      print(fish_raw[!is.na(AGE), .(N = .N), by = .(YEAR, REGION_GRP)][order(YEAR)])
 
       obs_yrs <- ALL_DATA[, sort(unique(YEAR))]
       fsh_age_yrs <- sort(unique(fish_raw$YEAR))
@@ -645,43 +679,37 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
       min_n_cell = 30L,
       prior_mix  = 0.7
     )
- 
-  
-  if (do_samples) {
-    # produce a list of sampled ALL_DATA draws
-    ALL_DATA_list <- lapply(seq_len(n_samples), function(i) {
-      predict_age_from_lf(
+
+    if (do_samples) {
+      ALL_DATA_list <- lapply(seq_len(n_samples), function(i) {
+        predict_age_from_lf(
+          lf_dt         = ALL_DATA,
+          predictor     = age_pred,
+          target        = "row_age",
+          map_or_sample = "sample",
+          seed          = as.integer(seed + i - 1L)
+        )
+      })
+
+      ALL_DATA_list <- lapply(ALL_DATA_list, function(ad) {
+        ad <- data.table::as.data.table(ad)
+        ad[, LENGTH := as.integer(AGE_HAT)]
+        ad
+      })
+
+      ALL_DATA <- ALL_DATA_list
+      rm(ALL_DATA_list)
+
+    } else {
+      ALL_DATA <- predict_age_from_lf(
         lf_dt         = ALL_DATA,
         predictor     = age_pred,
         target        = "row_age",
-        map_or_sample = "sample",
-        seed          = as.integer(seed + i - 1L)
+        map_or_sample = map_sample,
+        seed          = seed
       )
-    })
-
-    # convert predicted age -> LENGTH (as integer bin) for each draw
-    ALL_DATA_list <- lapply(ALL_DATA_list, function(ad) {
-      ad <- data.table::as.data.table(ad)
-      ad[, LENGTH := as.integer(AGE_HAT)]
-      ad
-    })
-
-    ALL_DATA <- ALL_DATA_list
-    rm(ALL_DATA_list)
-
-  } else {
-    # single deterministic draw (MAP) or single stochastic sample
-    ALL_DATA <- predict_age_from_lf(
-      lf_dt         = ALL_DATA,
-      predictor     = age_pred,
-      target        = "row_age",
-      map_or_sample = map_sample,
-      seed          = seed
-    )
-    ALL_DATA[, LENGTH := as.integer(AGE_HAT)]
-  }
-    
-
+      ALL_DATA[, LENGTH := as.integer(AGE_HAT)]
+    }
   }
 
   # ------------------------------------------------------------
@@ -697,7 +725,9 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
   data.table::setnames(CATCHT, toupper(names(CATCHT)))
   CATCHT <- CATCHT[YEAR >= start_year & YEAR <= end_year][TONS > 0]
 
-  if(isTRUE(wgoa_cod)){ CATCHT[AREA==620 & ADFG_AREA<= 580000]$AREA <- 610}  ## for WGOA Pcod
+  if (isTRUE(wgoa_cod)) {
+    CATCHT[AREA == 620 & ADFG_AREA <= 580000]$AREA <- 610
+  }
 
   CATCHT[, AREA := suppressWarnings(as.integer(as.character(AREA)))]
   CATCHT <- add_region_group(CATCHT, region_def = region_def, area_col = "AREA", drop_unmapped = drop_unmapped)
@@ -729,17 +759,16 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
   CATCHT2[, SPECIES := as.numeric(species)]
   CATCHT2 <- CATCHT2[is.finite(NUMBER) & NUMBER > 0]
 
-  # NOTE: now include REGION_GRP in catch totals so compositions are per-region
   CATCHT4 <- CATCHT2[, .(YAGM_TNUM = sum(NUMBER), YAGM_TONS = sum(TONS)),
-                    by = .(REGION_GRP, SPECIES, YEAR, GEAR, AREA2, MONTH)]
+                     by = .(REGION_GRP, SPECIES, YEAR, GEAR, AREA2, MONTH)]
 
   xt_YAG <- CATCHT4[, .(YAG_TNUM = sum(YAGM_TNUM)), by = .(REGION_GRP, YEAR, AREA2, GEAR)]
   xt_YG  <- CATCHT4[, .(YG_TNUM  = sum(YAGM_TNUM)), by = .(REGION_GRP, YEAR, GEAR)]
   xt_Y   <- CATCHT4[, .(Y_TNUM   = sum(YAGM_TNUM)), by = .(REGION_GRP, YEAR)]
 
   CATCHT4 <- merge(CATCHT4, xt_YAG, by = c("REGION_GRP","YEAR","AREA2","GEAR"), all.x = TRUE)
-  CATCHT4 <- merge(CATCHT4, xt_YG,  by = c("REGION_GRP","YEAR","GEAR"),        all.x = TRUE)
-  CATCHT4 <- merge(CATCHT4, xt_Y,   by = c("REGION_GRP","YEAR"),               all.x = TRUE)
+  CATCHT4 <- merge(CATCHT4, xt_YG,  by = c("REGION_GRP","YEAR","GEAR"), all.x = TRUE)
+  CATCHT4 <- merge(CATCHT4, xt_Y,   by = c("REGION_GRP","YEAR"), all.x = TRUE)
   CATCHT4[, SPECIES := as.numeric(SPECIES)]
 
   # ------------------------------------------------------------
@@ -753,33 +782,44 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
     Length[, YAGMH_SNUM := NUMB]
     Length[, YAGMH_STONS := EXTRAPOLATED_WEIGHT / 1000]
 
-    # ensure region group exists (ALL_DATA should already carry it via OBS/PORT)
     if (!"REGION_GRP" %in% names(Length)) {
       Length <- add_region_group(Length, region_def = region_def, area_col = "AREA", drop_unmapped = drop_unmapped)
     }
 
-    if (!isTRUE(SEX)) {
-      Length <- Length[, .(SUM_FREQUENCY = sum(SUM_FREQUENCY)),
-                       by = .(REGION_GRP, SPECIES,YEAR,AREA2,GEAR,MONTH,MONTH_WED,CRUISE,VES_AKR_ADFG,HAUL_JOIN,
-                              LENGTH,YAGMH_STONS,YAGMH_SNUM)]
-    } else {
-      Length <- Length[, .(SUM_FREQUENCY = sum(SUM_FREQUENCY)),
-                       by = .(REGION_GRP, SPECIES,YEAR,AREA2,GEAR,MONTH,MONTH_WED,CRUISE,VES_AKR_ADFG,HAUL_JOIN,
-                              SEX,LENGTH,YAGMH_STONS,YAGMH_SNUM)]
+    # --- split unsexed fish 50/50 into F/M for sex-specific comps ---
+    if (isTRUE(SEX)) {
+      Length <- split_unsexed_5050(
+        Length,
+        sex_col = "SEX",
+        female_code = 1L,
+        male_code   = 2L,
+        unsex_code  = 3L,
+        split_cols  = c("SUM_FREQUENCY","YAGMH_SNUM","YAGMH_STONS")
+      )
     }
 
-    L_YAGMH <- Length[, .(YAGMH_SFREQ = sum(SUM_FREQUENCY)), by = .(CRUISE,VES_AKR_ADFG,HAUL_JOIN)]
+    if (!isTRUE(SEX)) {
+      Length <- Length[, .(SUM_FREQUENCY = sum(SUM_FREQUENCY)),
+                       by = .(REGION_GRP, SPECIES, YEAR, AREA2, GEAR, MONTH, MONTH_WED, CRUISE, VES_AKR_ADFG, HAUL_JOIN,
+                              LENGTH, YAGMH_STONS, YAGMH_SNUM)]
+    } else {
+      Length <- Length[, .(SUM_FREQUENCY = sum(SUM_FREQUENCY)),
+                       by = .(REGION_GRP, SPECIES, YEAR, AREA2, GEAR, MONTH, MONTH_WED, CRUISE, VES_AKR_ADFG, HAUL_JOIN,
+                              SEX, LENGTH, YAGMH_STONS, YAGMH_SNUM)]
+    }
+
+    L_YAGMH <- Length[, .(YAGMH_SFREQ = sum(SUM_FREQUENCY)), by = .(CRUISE, VES_AKR_ADFG, HAUL_JOIN)]
     Length <- merge(Length, L_YAGMH, by = c("CRUISE","VES_AKR_ADFG","HAUL_JOIN"), all.x = TRUE)
 
     L_YAGM <- Length[, .(YAGM_SNUM = sum(YAGMH_SNUM), YAGM_SFREQ = sum(SUM_FREQUENCY)),
-                     by = .(REGION_GRP, YEAR,AREA2,GEAR,MONTH)]
+                     by = .(REGION_GRP, YEAR, AREA2, GEAR, MONTH)]
     Length <- merge(Length, L_YAGM, by = c("REGION_GRP","YEAR","AREA2","GEAR","MONTH"), all.x = TRUE)
 
     Length[, SPECIES := as.numeric(SPECIES)]
     x <- merge(Length, CATCHT4, by = c("REGION_GRP","SPECIES","YEAR","AREA2","GEAR","MONTH"), all.x = TRUE)
     y2 <- x[!is.na(YAGM_TNUM)]
 
-    # attach SEASON (optional) using chosen month column
+    # attach SEASON (optional)
     y2 <- add_user_season(y2, season_def = season_def, month_col = "MONTH", verbose = verbose)
     if (!is.null(season_def)) y2 <- y2[!is.na(SEASON)]
 
@@ -794,7 +834,7 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
     y2 <- y2[YAGM_SFREQ > 30]
 
     # ------------------------------------------------------------
-    # 7) Final compositions (annual or seasonal), now by REGION_GRP
+    # 7) Final compositions (annual or seasonal), by REGION_GRP
     # ------------------------------------------------------------
     have_season <- !is.null(season_def)
 
@@ -823,22 +863,22 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
     } else {
       if (!have_season) {
         agg <- y2[, .(WEIGHT = sum(WEIGHTX, na.rm = TRUE)), by = .(REGION_GRP, YEAR, SEX, LENGTH)]
-        agg[, TWEIGHT := sum(WEIGHT), by = .(REGION_GRP, YEAR, SEX)]
+        agg[, TWEIGHT := sum(WEIGHT), by = .(REGION_GRP, YEAR)]
         agg[, FREQ := data.table::fifelse(TWEIGHT > 0, WEIGHT / TWEIGHT, 0)]
         out_agg <- agg[, .(REGION_GRP, YEAR, SEX, LENGTH, FREQ)]
 
         byg <- y2[, .(WEIGHT = sum(WEIGHTX_GEAR, na.rm = TRUE)), by = .(REGION_GRP, YEAR, GEAR, SEX, LENGTH)]
-        byg[, TWEIGHT := sum(WEIGHT), by = .(REGION_GRP, YEAR, GEAR, SEX)]
+        byg[, TWEIGHT := sum(WEIGHT), by = .(REGION_GRP, YEAR, GEAR)]
         byg[, FREQ := data.table::fifelse(TWEIGHT > 0, WEIGHT / TWEIGHT, 0)]
         out_byg <- byg[, .(REGION_GRP, YEAR, GEAR, SEX, LENGTH, FREQ)]
       } else {
         agg <- y2[, .(WEIGHT = sum(WEIGHTX, na.rm = TRUE)), by = .(REGION_GRP, YEAR, SEASON, SEX, LENGTH)]
-        agg[, TWEIGHT := sum(WEIGHT), by = .(REGION_GRP, YEAR, SEASON, SEX)]
+        agg[, TWEIGHT := sum(WEIGHT), by = .(REGION_GRP, YEAR, SEASON)]
         agg[, FREQ := data.table::fifelse(TWEIGHT > 0, WEIGHT / TWEIGHT, 0)]
         out_agg <- agg[, .(REGION_GRP, YEAR, SEASON, SEX, LENGTH, FREQ)]
 
         byg <- y2[, .(WEIGHT = sum(WEIGHTX_GEAR, na.rm = TRUE)), by = .(REGION_GRP, YEAR, SEASON, GEAR, SEX, LENGTH)]
-        byg[, TWEIGHT := sum(WEIGHT), by = .(REGION_GRP, YEAR, SEASON, GEAR, SEX)]
+        byg[, TWEIGHT := sum(WEIGHT), by = .(REGION_GRP, YEAR, SEASON, GEAR)]
         byg[, FREQ := data.table::fifelse(TWEIGHT > 0, WEIGHT / TWEIGHT, 0)]
         out_byg <- byg[, .(REGION_GRP, YEAR, SEASON, GEAR, SEX, LENGTH, FREQ)]
       }
@@ -850,6 +890,7 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
 
     regions <- sort(unique(as.character(out_agg$REGION_GRP)))
     years <- sort(unique(out_agg$YEAR))
+
     if (!have_season) {
       if (!isTRUE(SEX)) {
         grid1 <- data.table::CJ(REGION_GRP = regions, YEAR = years, LENGTH = 1:maxL, unique = TRUE)
@@ -911,7 +952,7 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
       }
     }
 
-    # Sample size summaries (include REGION_GRP, and SEASON if present)
+    # Sample size summaries
     if (!isTRUE(SEX)) {
       if (!have_season) {
         samp <- y2[, .(
@@ -978,17 +1019,41 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
       data.table::setnames(out_byg, "LENGTH", "AGE")
       data.table::setnames(out_agg, "LENGTH", "AGE")
     }
-    
+
+    if (isTRUE(SEX)) {
+      recode_sex_to_char <- function(x) {
+        if (is.character(x)) return(x)
+        sx <- as.integer(x)
+        out <- rep(NA_character_, length(sx))
+        out[sx == 1L] <- "F"
+        out[sx == 2L] <- "M"
+        out
+      }
+
+      if ("SEX" %in% names(out_agg)) {
+        out_agg[, SEX := recode_sex_to_char(SEX)]
+      }
+
+      if ("SEX" %in% names(out_byg)) {
+        out_byg[, SEX := recode_sex_to_char(SEX)]
+      }
+
+      out_agg[, SEX := factor(SEX, levels = c("F","M"))]
+      out_byg[, SEX := factor(SEX, levels = c("F","M"))]
+    }
+
     list(aggregated = out_agg[], by_gear = out_byg[])
   }
 
-
   wrap_out <- function(x) {
-    if (!isTRUE(return_predictor) && age_length=="AGE") return(x)
-    list(
-      output = x,
-      age_predictor = age_pred
-    )
+    if (!isTRUE(return_predictor) || age_length != "AGE") {
+      return(x)
+    } else {
+      list(
+        output = x,
+        age_predictor = age_pred
+      )
+    }
   }
 
   if (do_samples) {
@@ -1001,7 +1066,6 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
   } else {
     out <- compute_comps_one(ALL_DATA)
     vcat("Done.")
-    return(out)
+    return(wrap_out(out))
   }
-
 }

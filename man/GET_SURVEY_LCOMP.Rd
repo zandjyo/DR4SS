@@ -10,7 +10,7 @@ GET_SURVEY_LCOMP(
   bins = seq(4.5, 119.5, 5),
   bin = TRUE,
   area = "BS",
-  sex = 1,
+  sex = FALSE,
   SS = TRUE,
   seas = 1,
   flt = 3,
@@ -23,37 +23,39 @@ GET_SURVEY_LCOMP(
 
 \item{species}{Numeric observer species code.}
 
-\item{bins}{Numeric vector of SS length-bin lower edges
-(e.g., \code{seq(3.5, 119.5, 1)}).}
+\item{bins}{Numeric vector of SS length-bin lower edges (e.g., seq(3.5,119.5,1)).}
 
-\item{bin}{Logical; if TRUE, bin integer lengths into \code{bins} using
-\code{BIN_LEN_DATA()}.}
+\item{bin}{Logical; if TRUE, bin integer lengths into \code{bins} using BIN_LEN_DATA().}
 
-\item{area}{Character area identifier: one of \code{"GOA"}, \code{"AI"},
-\code{"BS"}, \code{"SLOPE"}.}
+\item{area}{Character area identifier: one of "GOA", "AI", "BS", "SLOPE".}
 
-\item{sex}{Integer; \code{1} aggregates across sex (supported).
-Other values return unformatted long data.}
+\item{sex}{Logical; if FALSE, aggregate across sex. If TRUE, return female+male with unknowns split 50/50.}
 
-\item{SS}{Logical; if TRUE, format output as an SS3 length-comp matrix
-(requires \code{sex == 1}).}
+\item{SS}{Logical; if TRUE, format output as an SS3 length-comp matrix.}
 
 \item{seas}{Integer SS season.}
 
 \item{flt}{Integer SS fleet/survey index.}
 
-\item{gender}{Integer SS gender code.}
+\item{gender}{Integer SS gender code (typical: 1=female, 2=male, 3=both).
+If sex=TRUE and SS=TRUE, this will be forced to 3 unless you override intentionally.}
 
 \item{part}{Integer SS partition code.}
 }
 \value{
-If \code{SS = TRUE} and \code{sex == 1}, a numeric matrix formatted
-for Stock Synthesis. Otherwise, a data.frame/data.table of length
-compositions.
+If SS=TRUE, a numeric matrix formatted for Stock Synthesis.
+Otherwise, a data.table of compositions.
 }
 \description{
 Pulls survey length composition data and associated haul/sample counts from
 the AKFIN database for a specified region and species. Length data may be
 binned into Stock Synthesis (SS) length bins and optionally formatted into
 the SS3 length-composition matrix layout (one row per year).
+}
+\details{
+Sex handling:
+If sex=TRUE, returns sex-specific compositions with females first then males,
+and splits unknown sex (SEX==3) 50:50 between females (2) and males (1).
+When sex=TRUE, proportions are normalized within YEAR across both sexes
+combined, so the full row sums to 1.
 }

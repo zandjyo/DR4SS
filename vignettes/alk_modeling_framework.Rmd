@@ -1,0 +1,203 @@
+---
+title: "Statistical Age–Length Key (ALK) Modeling Framework"
+author: "AFSC Assessment Team"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Statistical Age–Length Key (ALK) Modeling Framework}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+# Overview
+
+This vignette describes the statistical modeling framework used to construct age–length keys (ALKs) within this package. The approach replaces traditional empirical ALKs with a hierarchical generalized additive modeling (GAM) structure that:
+
+- Smooths the age–length relationship
+- Allows borrowing of information across years and areas within region
+- Maintains independence among major geographic regions
+- Produces posterior age distributions for each length observation
+
+The resulting age compositions are suitable for use in Stock Synthesis.
+
+# Regional Independence
+
+Models are fit **independently for each `REGION_GRP`**.
+
+No parameters are shared across regions. This ensures:
+
+- Biological differences among regions are preserved
+- Borrowing occurs only within region
+- No cross-region smoothing or shrinkage occurs
+
+# Modeling Structure
+
+The ALK framework proceeds in two stages:
+
+1. Survey backbone model  
+2. Fishery quarter deviation model  
+
+## 1. Survey Backbone Model
+
+Survey age data (Q3 backbone) define the baseline age–length relationship.
+
+Age is modeled as:
+
+$$
+A_i \sim \mathcal{N}(\mu_i, \sigma^2)
+$$
+
+$$
+\mu_i = f(L_i) + b_{YEAR(i)} + b_{AREA(i)}
+$$
+
+Where:
+
+- $A_i$ = observed age  
+- $L_i$ = length  
+- $f(L)$ = penalized spline smooth  
+- $b_{YEAR}$ = random year effect  
+- $b_{AREA}$ = random area effect  
+
+### Interpretation
+
+- The spline produces a smooth age–length curve.
+- Random effects allow partial pooling across years and areas within region.
+- Sparse years/areas shrink toward the regional mean.
+- If predicting an unseen year or area, the random effect is set to zero.
+
+## 2. Fishery Quarter Deviation Model
+
+Fishery ages are modeled as deviations from the survey backbone.
+
+$$
+\Delta_i = A_i - \hat{\mu}^{survey}_i
+$$
+
+$$
+\Delta_i = g(L_i, Q_i) + u_{YEAR(i)} + u_{AREA(i)}
+$$
+
+Where:
+
+- $g(L,Q)$ = smooth interaction between length and quarter
+- $u_{YEAR}, u_{AREA}$ = random effects
+
+Predicted age becomes:
+
+$$
+\hat{A}_i = \hat{\mu}^{survey}_i + \hat{\Delta}_i
+$$
+
+This structure separates:
+
+- Baseline biological growth
+- Seasonal and fishery-specific deviations
+
+# Posterior Age Assignment
+
+For each length observation, a posterior age distribution is computed:
+
+$$
+P(A=a \mid L,s) \propto 
+\phi(a \mid \hat{\mu}(L,s), \hat{\sigma})
+\times
+\pi(a \mid s)
+$$
+
+Where:
+
+- $\phi$ = model likelihood (normal density)
+- $\pi(a \mid s)$ = empirical sex-specific prior
+- $s$ = sex
+
+Posterior probabilities are normalized over ages:
+
+$$
+a = 0, 1, \dots, A_{max}
+$$
+
+Unsexed fish are split 50/50 between male and female posteriors.
+
+# Borrowing Structure
+
+Borrowing is controlled explicitly:
+
+| Dimension | Borrowing | Mechanism |
+|------------|-----------|------------|
+| Across regions | No | Separate models |
+| Across years (within region) | Yes | Random effects |
+| Across areas (within region) | Yes | Random effects |
+| Across quarters | Partial | Smooth interaction |
+
+If a year or area is not observed in training data:
+
+- The corresponding random effect is set to zero
+- Prediction reverts to the regional smooth
+
+# Computational Implementation
+
+Models are fit using `mgcv`.
+
+For large datasets, `bam()` may be used for efficiency.
+
+Posterior computations:
+
+1. Are performed on unique `(REGION_GRP, YEAR, QUARTER, AREA_K, SEX2, LENGTH)` combinations  
+2. Use vectorized prediction for efficiency  
+3. Are merged back to full length-frequency data  
+
+# Example Workflow
+
+```{r example-workflow, eval=FALSE}
+# Fit age predictor
+age_pred <- fit_age_predictor(
+  survey_age_dt  = survey_data,
+  fishery_age_dt = fishery_data,
+  region_col     = "REGION_GRP"
+)
+
+# Predict age distributions from length data
+lf_with_age <- predict_age_from_lf(
+  lf_dt     = fishery_lengths,
+  predictor = age_pred,
+  max_age   = 10
+)
+
+# Construct catch-weighted age compositions
+age_comps <- LENGTH_AGE_BY_CATCH(
+  lf_dt = lf_with_age,
+  ...
+)
+```
+
+# Advantages Over Empirical ALKs
+
+Compared to traditional empirical ALKs:
+
+- Smooth age–length curve reduces sampling noise
+- Partial pooling stabilizes sparse strata
+- Explicit seasonal structure
+- Region-specific independence
+- Full posterior age distributions
+
+# Use in Stock Synthesis
+
+The resulting age compositions:
+
+- Are catch-weighted
+- Reflect seasonal and spatial effects
+- Incorporate modeled age uncertainty
+- Are formatted for SS input files
+
+# Summary
+
+This modeling framework provides a statistically robust, region-specific, and computationally efficient approach to constructing age–length keys for assessment applications.
+
+It balances smoothing and biological realism while maintaining explicit control over spatial borrowing.

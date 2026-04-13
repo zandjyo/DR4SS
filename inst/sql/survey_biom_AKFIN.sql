@@ -12,8 +12,6 @@ FROM
     INNER JOIN gap_products.akfin_biomass ON akr.species_translation.from_code = gap_products.akfin_biomass.species_code
 WHERE gap_products.akfin_biomass.area_id
     -- insert area_id
-AND gap_products.akfin_biomass.survey_definition_id
-     -- insert survey
 AND akr.species_translation.to_code
     -- insert species
 AND gap_products.akfin_biomass.year

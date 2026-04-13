@@ -17,7 +17,8 @@ fishery_cond_age_length(
   one_fleet = TRUE,
   wgoa_cod = TRUE,
   wt = 1,
-  ageerr = 1
+  ageerr = 1,
+  by_sex = FALSE
 )
 }
 \arguments{
@@ -44,6 +45,8 @@ fishery_cond_age_length(
 \item{wt}{Numeric scalar multiplier applied to \code{Nsamp}.}
 
 \item{ageerr}{Integer age-error definition code written to the \code{Ageerr} column.}
+
+\item{by_sex}{Logical; if TRUE, split output by sex (Stock Synthesis Gender column).}
 }
 \value{
 A named list with element \code{norm}, a \code{data.frame} in Stock Synthesis

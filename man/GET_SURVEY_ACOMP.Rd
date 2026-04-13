@@ -15,6 +15,7 @@ GET_SURVEY_ACOMP(
   seas = 1,
   flt = 2,
   gender = 1,
+  split_sex = FALSE,
   part = 0,
   ageerr = 0,
   lgin_lo = 1,
@@ -29,7 +30,8 @@ GET_SURVEY_ACOMP(
 
 \item{vast_agecomp}{A data.frame/data.table containing VAST age compositions.
 Expected columns include \code{Region}, \code{Year}, and age columns (0,1,2,...).
-Only used when \code{use_vast = TRUE}.}
+If \code{split_sex = TRUE}, it must also contain a sex column named \code{SEX}
+(or \code{Sex}/\code{sex}).}
 
 \item{species}{Numeric species code.}
 
@@ -43,7 +45,11 @@ Only used when \code{use_vast = TRUE}.}
 
 \item{flt}{Integer SS fleet/survey index.}
 
-\item{gender}{Integer SS gender code.}
+\item{gender}{Integer SS gender code used when \code{split_sex = FALSE}.}
+
+\item{split_sex}{Logical; if \code{TRUE}, return split-sex age compositions with
+one row per year and male bins first, then female bins. Unsexed fish
+(\code{SEX == 3}) are split 50:50 between sexes.}
 
 \item{part}{Integer SS partition code.}
 
@@ -55,7 +61,11 @@ Only used when \code{use_vast = TRUE}.}
 }
 \value{
 A data.frame formatted for the Stock Synthesis age-composition data block.
-Columns are: YEAR, Seas, FltSvy, Gender, Part, Ageerr, Lgin_lo, Lgin_hi, Nsamp, F0..Fmax_age.
+If \code{split_sex = FALSE}, columns are:
+YEAR, Seas, FltSvy, Gender, Part, Ageerr, Lgin_lo, Lgin_hi, Nsamp, F0..Fmax_age.
+If \code{split_sex = TRUE}, columns are:
+YEAR, Seas, FltSvy, Gender, Part, Ageerr, Lgin_lo, Lgin_hi, Nsamp,
+M0..Mmax_age, F0..Fmax_age.
 }
 \description{
 Pulls survey age composition data from the AKFIN database (default) and formats
@@ -72,5 +82,11 @@ This function preserves legacy behavior from historical assessment scripts:
 appended to the main result set.
 \item When \code{use_vast = TRUE}, records are filtered to \code{Region == "Both"}
 and \code{Year != 2020} to match legacy processing.
+\item When \code{split_sex = TRUE}, sex-specific age compositions are returned in
+Stock Synthesis split-sex format: one row per year with male age bins first
+(\code{M0...Mmax_age}) and female age bins second (\code{F0...Fmax_age}).
+\item Unsexed fish (\code{SEX == 3}) are split 50:50 between males
+(\code{SEX == 1}) and females (\code{SEX == 2}) before final normalization.
+\item When \code{split_sex = FALSE}, sexes are pooled across all records.
 }
 }

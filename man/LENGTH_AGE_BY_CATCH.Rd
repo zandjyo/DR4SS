@@ -63,7 +63,7 @@ age-predictor helper functions.}
 e.g. list(A=1:3,B=4:6,C=7:9,D=10:12) or list(A=1:6,B=7:12).}
 
 \item{region_def}{Optional named list mapping REGION_GRP labels to AREA codes, e.g.
-listlist(BS=c(500:539),WGOA=c(610),CGOA=c(620:649),EGOA=650:659),AI=c(541:544)). If provided, outputs are by REGION_GRP.
+list(BS=c(500:539),WGOA=c(610),CGOA=c(620:649),EGOA=650:659,AI=c(541:544)). If provided, outputs are by REGION_GRP.
 If NULL, a single REGION_GRP is used (equal to \code{sp_area}) and default area filtering is used.}
 
 \item{drop_unmapped}{Logical. If TRUE and region_def is provided, drop rows whose AREA does not map
@@ -72,9 +72,6 @@ to a REGION_GRP. Default TRUE.}
 \item{wgoa_cod}{Logical. If TRUE, moves catch from NMFS area 620 west of -158 longitude into the 610 region group}
 
 \item{return_predictor}{Logical. if TRUE returns age at length predictor model in list}
-
-\item{season_month}{Which month column to use for season mapping: "MONTH" or "MONTH_WED".
-Default "MONTH".}
 }
 \value{
 A list with two elements:
@@ -121,4 +118,10 @@ from observer data with hierarchical fallback across strata.
 \item Compute hierarchical weights and produce compositions (optionally by season
 and/or user-defined region group).
 }
+
+Sex handling:
+If \code{SEX=TRUE}, unknown sex observations (\code{SEX==3}) are split 50:50 between
+females (\code{SEX==1}) and males (\code{SEX==2}). Final frequencies are normalized
+across both sexes combined within each composition stratum, so the full set of
+female + male bins sums to 1.
 }

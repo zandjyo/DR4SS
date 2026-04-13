@@ -9,7 +9,7 @@
 #' assessment workflows.
 #'
 #' @param con_akfin A live DBI connection to the AKFIN database.
-#' @param species Character vector of species codes or species group identifiers
+#' @param species Numeric vector of observer species codes
 #'   to filter in the SQL query.
 #' @param region_def A **named list** defining region groupings. Each list
 #'   element name is the region label, and each value is a vector of NMFS
@@ -216,10 +216,10 @@ add_region_group <- function(dt, region_def, area_col = "AREA", drop_unmapped = 
 
   sql_code <- sql_filter(
     sql_precode = "IN",
-    x           = species_group,
+    x           = species,
     sql_code    = sql_code,
     flag        = "-- insert species",
-    value_type  = "character"
+    value_type  = "numeric"
   )
 
   # ---- run ----

@@ -25,85 +25,88 @@ foreign_length_by_catch(
 
 \item{species}{Numeric species code used in the length-frequency query (e.g., 202).}
 
-\item{for_species_catch}{Character species label used in the catch query (e.g., \code{"PACIFIC COD"}).
-Must be one of:
-
-ALL FLOUNDERS
-ALL ROCKFISH
-ARROWTOOTH FL
-ATKA MACKEREL
-DEMERSAL RF
-FLATFISH DISC
-FLOUNDER WO YFS
-GREENLAND TURBOT
-HERRING
-JACK DISCARD
-JACK MACKEREL
-OTHER DISCARD
-OTHER FISH
-OTHER RF DISC
-PACIFIC COD
-PACIFIC WHITING
-PELAGIC RF
-POLLOCK
-POP
-POP DISCARDS
-RATTAILS
-ROCK SOLE
-ROCKFISH WO POP
-SABLEFISH
-SABLEFISH DIS
-SHORTBELLY RF
-SLOPE ROCKFISH
-SNAILS
-SQUID
-SS THORNYHEAD
-TURBOTS
-YELLOWFIN SOLE}
+\item{for_species_catch}{Character species label used in the catch query
+(e.g., \code{"PACIFIC COD"}). Must be one of:
+\itemize{
+\item ALL FLOUNDERS
+\item ALL ROCKFISH
+\item ARROWTOOTH FL
+\item ATKA MACKEREL
+\item DEMERSAL RF
+\item FLATFISH DISC
+\item FLOUNDER WO YFS
+\item GREENLAND TURBOT
+\item HERRING
+\item JACK DISCARD
+\item JACK MACKEREL
+\item OTHER DISCARD
+\item OTHER FISH
+\item OTHER RF DISC
+\item PACIFIC COD
+\item PACIFIC WHITING
+\item PELAGIC RF
+\item POLLOCK
+\item POP
+\item POP DISCARDS
+\item RATTAILS
+\item ROCK SOLE
+\item ROCKFISH WO POP
+\item SABLEFISH
+\item SABLEFISH DIS
+\item SHORTBELLY RF
+\item SLOPE ROCKFISH
+\item SNAILS
+\item SQUID
+\item SS THORNYHEAD
+\item TURBOTS
+\item YELLOWFIN SOLE
+}}
 
 \item{start_year, end_year}{Numeric scalar years defining the inclusive year range.}
 
-\item{SEX}{Logical; if \code{TRUE}, keep sex-specific compositions (expects a \code{SEX} column).
-If \code{FALSE}, sexes are pooled.}
+\item{SEX}{Logical; if \code{TRUE}, keep sex-specific compositions (expects a
+\code{SEX} column). If \code{FALSE}, sexes are pooled.}
 
 \item{season_def}{Optional named list mapping seasons to months, e.g.
-\code{list(A = 1:4, B = 5:12)}. If provided, outputs include \code{SEASON} and months not mapped
-are dropped (with a message when \code{verbose=TRUE}).}
+\code{list(A = 1:4, B = 5:12)}. If provided, outputs include \code{SEASON} and months
+not mapped are dropped (with a message when \code{verbose = TRUE}).}
 
-\item{region_def}{Named list mapping region labels to AREA codes. Must be non-overlapping.
-Default corresponds to common Alaska groundfish groupings (BS/WGOA/CGOA/EGOA/AI).}
+\item{region_def}{Named list mapping region labels to AREA codes. Must be non-overlapping.}
 
 \item{drop_unmapped}{Logical; drop rows whose AREA does not map into \code{region_def}.}
 
-\item{wgoa_cod}{Logical; if \code{TRUE}, optionally remaps selected WGOA areas based on longitude
-(see code block).}
+\item{wgoa_cod}{Logical; if \code{TRUE}, optionally remaps selected WGOA areas based on longitude.}
 
 \item{verbose}{Logical; emit summaries and progress messages.}
 }
 \value{
 A named list with two \code{data.table}s:
-\describe{
-\item{\code{aggregated}}{Compositions aggregated across gear. Columns include REGION_GRP, YEAR,
-LENGTH (and optionally SEASON, SEX), FREQ, plus sample size summaries (NSAMP, NHAUL, NSTRATA).}
-\item{\code{by_gear}}{Compositions by gear. Columns include REGION_GRP, YEAR, GEAR, LENGTH
-(and optionally SEASON, SEX), FREQ, plus sample size summaries.}
+\itemize{
+\item \code{aggregated}
+\item \code{by_gear}
 }
+Each includes normalized \code{FREQ}, sample-size summaries, and \code{COMP_SOURCE}.
 }
 \description{
 Builds annual (or seasonal) foreign length compositions by region (and optionally sex),
-using observer length frequencies reweighted to foreign catch totals. The weighting follows
-a multi-stage approach: within-haul frequency scaling, haul-to-stratum scaling, and expansion
-to catch-based totals (overall and by-gear variants).
+using observer length frequencies reweighted to foreign catch totals when matching catch
+data are available. Weighting follows a multi-stage approach: within-haul frequency
+scaling, haul-to-stratum scaling, and expansion to catch-based totals (overall and by-gear
+variants).
 }
 \details{
 The function:
 \enumerate{
-\item Pulls foreign observer length frequency data for \code{species} and requested areas/years.
-\item Computes mean weights (AVEWT) at several strata resolutions (YEAR-AREA2-MONTH-GEAR, etc.)
-and uses a priority fallback to assign \code{AVEWT} to catch rows.
-\item Pulls foreign catch (tons) for \code{for_species_catch} and converts to numbers using AVEWT.
-\item Joins observer length data to catch numbers by REGION_GRP/YEAR/AREA2/GEAR/MONTH.
-\item Computes weights:
+\item Pulls foreign observer length-frequency data for \code{species} and requested
+areas/years.
+\item Computes mean weights (\code{AVEWT}) at several strata resolutions
+(YEAR-AREA2-MONTH-GEAR, etc.) and uses a priority fallback to assign
+\code{AVEWT} to catch rows.
+\item Pulls foreign catch (tons) for \code{for_species_catch} and converts to numbers
+using \code{AVEWT}.
+\item Joins observer length data to catch numbers by
+REGION_GRP / YEAR / AREA2 / GEAR / MONTH.
+\item Computes weighting factors:
 \describe{
 \item{\code{WEIGHT1}}{Within-haul share: \code{SUM_FREQUENCY / YAGMH_SFREQ}}
 \item{\code{WEIGHT2}}{Haul-to-stratum scaling: \code{YAGMH_SNUM / YAGM_SNUM}}
@@ -112,11 +115,33 @@ and uses a priority fallback to assign \code{AVEWT} to catch rows.
 }
 \item Produces normalized compositions \code{FREQ} on a dense 1:maxL grid for:
 \itemize{
-\item aggregated (by REGION_GRP x YEAR x SEASON x SEX)
-\item by-gear (by REGION_GRP x YEAR x GEAR x SEASON x SEX)
+\item aggregated output (by REGION_GRP x YEAR x SEASON x SEX as applicable)
+\item by-gear output (by REGION_GRP x YEAR x GEAR x SEASON x SEX as applicable)
 }
 }
+
+Fallback rule:
+If catch-based weighting data are unavailable for a particular output grouping,
+the function falls back to the raw observer length compositions for that grouping.
+Specifically:
+\itemize{
+\item for \code{aggregated}, fallback is applied at REGION_GRP x YEAR
+\item for \code{by_gear}, fallback is applied at REGION_GRP x YEAR x GEAR
 }
-\seealso{
-\code{\link[data.table]{data.table}}, \code{\link[lubridate]{month}}
+If no catch data are available at all after filtering/mapping, the function returns
+raw observer length compositions for all available groups. The output includes a
+\code{COMP_SOURCE} column with values \code{"weighted"} or \code{"raw"} indicating
+which source was used.
+
+IMPORTANT SEX RULE:
+This function treats foreign/fishery sex codes as:
+\itemize{
+\item \code{SEX == 1}: female
+\item \code{SEX == 2}: male
+\item \code{SEX == 3}: unknown
+}
+If \code{SEX = TRUE}, unidentified sex observations (\code{SEX == 3}) are split
+50/50 into female (1) and male (2) at the composition aggregation step before
+normalization. Final sex-specific frequencies are normalized across both sexes
+combined within each stratum, so the female and male bins sum to 1 together.
 }

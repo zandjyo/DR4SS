@@ -2,7 +2,7 @@
 % Please edit documentation in R/predict_age_from_lf.R
 \name{predict_age_from_lf}
 \alias{predict_age_from_lf}
-\title{Predict ages for large fishery length-frequency data (bulk)}
+\title{Predict ages from length-frequency using region-specific predictors (bulk)}
 \usage{
 predict_age_from_lf(
   lf_dt,
@@ -14,26 +14,21 @@ predict_age_from_lf(
 }
 \arguments{
 \item{lf_dt}{data.frame/data.table with LENGTH (cm), SEX (M/F/U), MONTH, AREA, YEAR,
-and optionally N (counts) and REGION_GRP (user-defined region grouping from region_def).
-If REGION_GRP is present, predictions will use the hierarchical spatial structure
-(REGION + AREA nested within REGION) that was fit in fit_age_predictor().}
+and REGION_GRP (required unless predictor only has region "ALL"). Optional N counts.}
 
 \item{predictor}{Object from fit_age_predictor().}
 
-\item{target}{Return type: "agecomp", "posterior_rows", or "row_age".}
+\item{target}{"agecomp", "posterior_rows", or "row_age".}
 
 \item{map_or_sample}{If returning integer ages, use "MAP" or "sample".}
 
 \item{seed}{RNG seed when sampling.}
 }
 \value{
-Depending on target:
-\describe{
-\item{agecomp}{expected age counts by (YEAR,QUARTER,AREA_K,SEX2,AGE)}
-\item{posterior_rows}{one row per unique (YEAR,QUARTER,AREA_K,SEX2,LENGTH) with posterior list-column}
-\item{row_age}{original rows plus QUARTER, SEX2, and predicted AGE_HAT (and optional AGE_METHOD)}
-}
+See original predict_age_from_lf() documentation.
 }
 \description{
-Fits should be precomputed with fit_age_predictor().
+Uses predictors fit by fit_age_predictor() (region-independent by REGION_GRP).
+No borrowing among regions: each row is predicted using its REGION_GRP model only.
+Borrowing within region occurs for missing YEAR/AREA levels by setting those REs to 0.
 }

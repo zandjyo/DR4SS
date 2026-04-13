@@ -2,12 +2,12 @@
 % Please edit documentation in R/fit_age_predictor.R
 \name{fit_age_predictor}
 \alias{fit_age_predictor}
-\title{Fit age predictor (survey Q3 backbone + fishery quarter delta + priors)}
+\title{Fit region-specific age predictor (survey Q3 backbone + fishery quarter delta + priors)}
 \usage{
 fit_age_predictor(
   fish_dt,
   srv_dt,
-  maxage = 12L,
+  maxage = 10L,
   min_n_cell = 30L,
   prior_mix = 0.7,
   k_age_survey = 10L,
@@ -15,36 +15,35 @@ fit_age_predictor(
 )
 }
 \arguments{
-\item{fish_dt}{Fishery aged data (from get_fishery_age_wt_data()).
-Must include YEAR, QUARTER, LENGTH (cm), AGE, SEX (F/M/U), AREA.
-If REGION_GRP exists (recommended; from region_def), it will be used for hierarchical spatial REs.}
+\item{fish_dt}{Fishery aged data. Must include YEAR, QUARTER, LENGTH (cm), AGE, SEX (F/M/U), AREA.
+REGION_GRP is required to fit separate regional models; if missing, all data are treated as one region ("ALL").}
 
-\item{srv_dt}{Survey aged data (from GET_SURV_AGE()).
-Must include YEAR, LENGTH_MM (mm), AGE, SEX (1/2/3 or F/M/U). All records are Q3.
-If REGION_GRP exists (recommended; from region_def), it will be used for hierarchical spatial REs.}
+\item{srv_dt}{Survey aged data (Q3). Must include YEAR, LENGTH_MM (mm), AGE, SEX, and optionally NMFS_AREA/AREA.
+REGION_GRP is required to fit separate regional models; if missing, all data are treated as one region ("ALL").}
 
 \item{maxage}{Plus-group maximum age.}
 
-\item{min_n_cell}{Minimum aged fish in a cell to use cell prior (else pooled).}
+\item{min_n_cell}{Minimum aged fish in a (YEAR,QUARTER,AREA,SEX) cell to use cell prior (else pooled).}
 
 \item{prior_mix}{Mixing weight for cell prior vs pooled prior.}
 
-\item{k_age_survey}{Target k for survey age smooth (will be reduced if needed).}
+\item{k_age_survey}{Target k for survey age smooth (auto-reduced if needed).}
 
-\item{k_age_delta}{Target k for fishery delta age smooth (will be reduced if needed).}
+\item{k_age_delta}{Target k for fishery delta age smooth (auto-reduced if needed).}
 }
 \value{
-A list with fitted models and prior tables.
+A list with one element per REGION_GRP containing:
+survey_fit, delta_fit, priors, factor levels, and meta.
 }
 \description{
-Robust to single-level factors (SEX/YEAR/AREA/QUARTER/REGION) and low unique-age support.
-Automatically reduces spline basis dimensions (k) to avoid mgcv "fewer unique
-covariate combinations than k" errors.
+This version enforces \strong{no borrowing among regions}:
+a separate predictor is fit for each REGION_GRP, and predictions must use the
+matching REGION_GRP model.
 }
 \details{
-Adds optional hierarchical spatial structure when REGION_GRP is present:
+Borrowing is allowed:
 \itemize{
-\item REGION_GRP random effect: broad-scale shifts among user-defined regions
-\item AREA nested within REGION_GRP random effect: fine-scale shifts among areas within region
+\item across YEARS \strong{within} a region (missing YEAR random effects set to 0 at predict-time)
+\item across AREAS \strong{within} a region (missing AREA random effects set to 0 at predict-time)
 }
 }

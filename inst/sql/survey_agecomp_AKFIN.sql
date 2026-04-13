@@ -1,6 +1,7 @@
 SELECT
     gap_products.akfin_agecomp.year,
     gap_products.akfin_agecomp.age,
+    gap_products.akfin_agecomp.sex,
     SUM(gap_products.akfin_agecomp.population_count) AS "AGEPOP"
 FROM
     akr.species_translation
@@ -17,6 +18,7 @@ WHERE
     AND akr.species_translation.to_agency = 'OBS'
 GROUP BY
     gap_products.akfin_agecomp.year,
-    gap_products.akfin_agecomp.age
+    gap_products.akfin_agecomp.age,
+    gap_products.akfin_agecomp.sex
 ORDER BY
     gap_products.akfin_agecomp.year

@@ -36,6 +36,7 @@
 #' @param wgoa_cod Logical; optional WGOA recoding logic passed to the data pull.
 #' @param wt Numeric scalar multiplier applied to \code{Nsamp}.
 #' @param ageerr Integer age-error definition code written to the \code{Ageerr} column.
+#' @param by_sex Logical; if TRUE, split output by sex (Stock Synthesis Gender column).
 #'
 #' @return A named list with element \code{norm}, a \code{data.frame} in Stock Synthesis
 #' conditional age-at-length format. If no data are available, returns an empty table with
@@ -57,19 +58,19 @@ fishery_cond_age_length <- function(con_akfin,
                                     one_fleet = TRUE,
                                     wgoa_cod=TRUE,
                                     wt = 1,
-                                    ageerr = 1) {
+                                    ageerr = 1,
+                                    by_sex = FALSE) {   
 
   if (!requireNamespace("data.table", quietly = TRUE)) {
     stop("Package 'data.table' is required.", call. = FALSE)
   }
-  
 
   # ---- validate inputs ----
- if (!is.numeric(len_bins) || length(len_bins) < 2) {
+  if (!is.numeric(len_bins) || length(len_bins) < 2) {
     stop("`len_bins` must be a numeric vector of length bins (length >= 2).", call. = FALSE)
   }
   len_bins <- sort(unique(len_bins))
-  
+
   dt<-get_fishery_age_wt_data(con_akfin=con_akfin,
                               species = species,
                               season_def = season_def,
@@ -80,8 +81,20 @@ fishery_cond_age_length <- function(con_akfin,
                               max_wt = 5000,
                               drop_unmapped = drop_unmapped)
 
+  # --- Add: handle missing SEX column or values ---
+ if ("SEX" %in% names(dt)) {
+    dt[, SEX := fifelse(SEX == "F", 1L,
+                 fifelse(SEX == "M", 2L, 3L))]
+  } else {
+    dt[, SEX := 3L]
+  }
+
+  if (by_sex) {
+    dt <- dt[SEX %in% c(1L, 2L)]
+  }
+
+
   if (nrow(dt) == 0L) {
-    # return empty SS-format table with correct columns
     age_cols <- paste0("a", 0:max_age)
     out <- data.frame(
       Yr = integer(0), Seas = integer(0), Flt = integer(0),
@@ -94,10 +107,7 @@ fishery_cond_age_length <- function(con_akfin,
   }
 
   # ---- harmonize / clean ----
-  # plus-group age
   dt[, AGE_FILT := pmin(AGE, max_age)]
-
-  # remove missing/non-positive age/length as in original
   dt <- dt[!is.na(AGE) & !is.na(LENGTH) & LENGTH > 0 & AGE > 0]
 
   if (nrow(dt) == 0L) {
@@ -112,7 +122,6 @@ fishery_cond_age_length <- function(con_akfin,
     return(list(norm = out))
   }
 
-
   # fleet mapping
   if (isTRUE(one_fleet)) {
     dt[, GEAR4 := 1L]
@@ -121,95 +130,84 @@ fishery_cond_age_length <- function(con_akfin,
   }
 
   # length binning (fast)
-  # - treat last bin as plus bin (everything >= last threshold maps to last bin)
-  # - for values below first bin, assign first bin
   idx <- findInterval(dt$LENGTH, vec = len_bins, rightmost.closed = TRUE, all.inside = FALSE)
   idx[idx < 1L] <- 1L
   idx[idx > length(len_bins)] <- length(len_bins)
   dt[, BIN := len_bins[idx]]
 
-  # ---- build SS conditional age-at-length compositions by fleet ----
+  # --- Add: set up sex grouping ---
+  if (by_sex) {
+    sexes <- sort(unique(dt$SEX))
+  } else {
+    sexes <- 3L # pooled
+    dt[, SEX := 3L]
+  }
+
   fleets <- sort(unique(dt$GEAR4))
   seasons<-sort(unique(dt$SEASON))
   regions<-sort(unique(dt$REGION_GRP))
-  
+
   age_levels <- 0:max_age
   age_cols <- paste0("a", age_levels)
 
-  out_list <- vector("list", length(fleets)*length(seasons)*length(regions))
-
+  out_list <- vector("list", length(fleets)*length(seasons)*length(regions)*length(sexes))
   ls1<-1
 
   for (fl in seq_along(fleets)) {
     for(sea in seq_along(seasons)){
       for(reg in seq_along(regions)){
+        for(sx in seq_along(sexes)){   # <-- NEW LOOP
+          flt <- fleets[fl]
+          sea <- seasons[sea]
+          reg <- regions[reg]
+          sex <- sexes[sx]
 
-    
-        flt <- fleets[fl]
-        sea <- seasons[sea]
-        reg <- regions[reg]
-    
-        dtk <- dt[GEAR4 == flt&SEASON==sea & REGION_GRP==reg]
+          dtk <- dt[GEAR4 == flt & SEASON == sea & REGION_GRP == reg & SEX == sex]
 
-        if (nrow(dtk) == 0L) next
+          if (nrow(dtk) == 0L) next
 
-    # counts by Year x BIN x AGE_FILT
-        cnt <- dtk[, .N, by = .(YEAR, BIN, AGE_FILT)]
+          cnt <- dtk[, .N, by = .(YEAR, BIN, AGE_FILT)]
+          ns <- cnt[, .(Nsamp = sum(N)), by = .(YEAR, BIN)]
 
-    # Nsamp by Year x BIN
-        ns <- cnt[, .(Nsamp = sum(N)), by = .(YEAR, BIN)]
+          wide <- data.table::dcast(
+            cnt,
+            YEAR + BIN ~ AGE_FILT,
+            value.var = "N",
+            fill = 0
+          )
 
-    # wide age counts by Year x BIN
-        wide <- data.table::dcast(
-          cnt,
-          YEAR + BIN ~ AGE_FILT,
-          value.var = "N",
-          fill = 0
-        )
+          missing_ages <- setdiff(as.character(age_levels), names(wide))
+          for (ma in missing_ages) wide[, (ma) := 0]
+          data.table::setcolorder(wide, c("YEAR", "BIN", as.character(age_levels)))
 
-    # ensure all age columns exist (0..max_age)
-        missing_ages <- setdiff(as.character(age_levels), names(wide))
-       for (ma in missing_ages) wide[, (ma) := 0]
+          wide <- merge(wide, ns, by = c("YEAR", "BIN"), all.x = TRUE)
+          for (a in as.character(age_levels)) {
+            wide[, (a) := data.table::fifelse(Nsamp > 0, get(a) / Nsamp, 0)]
+          }
+          wide[, Nsamp := Nsamp * wt]
 
-    # reorder age columns
-        data.table::setcolorder(wide, c("YEAR", "BIN", as.character(age_levels)))
+          ss <- data.table::data.table(
+            Yr     = as.integer(wide$YEAR),
+            Seas   = sea,
+            Flt    = paste(reg,flt,sep="_"),
+            Gender = if (by_sex) sex else 3L, # 1=female, 2=male, 3=pooled
+            Part   = 0L,
+            Ageerr = as.integer(ageerr),
+            Lbin_lo = as.numeric(wide$BIN),
+            Lbin_hi = as.numeric(wide$BIN),
+            Nsamp   = as.numeric(wide$Nsamp)
+          )
 
-    # convert to proportions
-       wide <- merge(wide, ns, by = c("YEAR", "BIN"), all.x = TRUE)
-       for (a in as.character(age_levels)) {
-         wide[, (a) := data.table::fifelse(Nsamp > 0, get(a) / Nsamp, 0)]
+          for (a in age_levels) {
+            ss[, paste0("a", a) := as.numeric(wide[[as.character(a)]])]
+          }
+
+          data.table::setorder(ss, Yr, Lbin_lo)
+          out_list[[ls1]] <- ss
+          ls1<-ls1+1
         }
-
-    # apply wt to Nsamp
-        wide[, Nsamp := Nsamp * wt]
-
-    # SS table columns
-    # Lbin_lo == Lbin_hi == BIN in your original
-        ss <- data.table::data.table(
-          Yr     = as.integer(wide$YEAR),
-          Seas   = sea,
-          Flt    = paste(reg,flt,sep="_"),
-          Gender = 0L,
-          Part   = 0L,
-          Ageerr = as.integer(ageerr),
-          Lbin_lo = as.numeric(wide$BIN),
-         Lbin_hi = as.numeric(wide$BIN),
-          Nsamp   = as.numeric(wide$Nsamp)
-        )
-
-    # attach age columns with SS names a0..aMax
-    # note: your original starts at AGE>0, but SS wants the full vector; a0 will be zeros here.
-      for (a in age_levels) {
-        ss[, paste0("a", a) := as.numeric(wide[[as.character(a)]])]
-      }
-
-      data.table::setorder(ss, Yr, Lbin_lo)
-
-      out_list[[ls1]] <- ss
-       ls1<-ls1+1
       }
     }
-    
   }
 
   out_dt <- data.table::rbindlist(out_list, use.names = TRUE, fill = TRUE)
