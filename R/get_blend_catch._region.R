@@ -34,6 +34,7 @@
 #' @param wgoa_cod Logical. If TRUE, applies special handling for WGOA Pacific cod,
 #'   reassigning certain AREA 620 records (based on ADFG_AREA) to match AREA 610
 #'   regional grouping.
+#' @param wgoa_cut  lognitude to cut for WGOA, e.g. -158  to include all data west of -158 in the WGOA and remove from CGOA
 #'
 #' @return A \code{data.table} containing blended catch data with standardized
 #'   and grouped fields, including:
@@ -78,7 +79,8 @@ get_blend_catch_region <- function(con_akfin,
                             season_def,
                             start_year,
                             end_year,
-                            wgoa_cod = TRUE
+                            wgoa_cod = TRUE,
+                            wgoa_cut= -158
                             ) {
 
   if (!requireNamespace("data.table", quietly = TRUE)) {
@@ -235,7 +237,8 @@ add_region_group <- function(dt, region_def, area_col = "AREA", drop_unmapped = 
 
   d <- add_region_group(dt=d, region_def=region_def, area_col = "AREA", drop_unmapped = TRUE)
 
-  if(isTRUE(wgoa_cod)){d[AREA==620 & ADFG_AREA >= 580000]$REGION_GRP<-unique(d[AREA==610]$REGION_GRP)}
+  cut<-(wgoa_cut+100)*-10000
+  if(isTRUE(wgoa_cod)){d[AREA==620 & ADFG_AREA >= cut]$REGION_GRP<-unique(d[AREA==610]$REGION_GRP)}
 
   # expected columns from your query
   # SPECIES, RETAINED_OR_DISCARDED, TONS, SEASON, MONTH_WED, GEAR, YEAR, AREA, REGION_GRP, SOURCE
@@ -254,5 +257,5 @@ add_region_group <- function(dt, region_def, area_col = "AREA", drop_unmapped = 
   
 
   data.table::setorder(d, REGION_GRP, YEAR, SEASON, MONTH_WED, GEAR)
-  d
+  return(d)
 }

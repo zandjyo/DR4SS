@@ -804,8 +804,20 @@ foreign_length_by_catch <- function(con_akfin,
   )
 
   data.table::setorderv(out_agg, intersect(c("REGION_GRP","YEAR","SEASON","SEX","LENGTH"), names(out_agg)))
-  data.table::setorderv(out_byg, intersect(c("REGION_GRP","YEAR","SEASON","GEAR","SEX","LENGTH"), names(out_byg)))
+data.table::setorderv(out_byg, intersect(c("REGION_GRP","YEAR","SEASON","GEAR","SEX","LENGTH"), names(out_byg)))
 
-  vcat("Done.")
-  list(aggregated = out_agg[], by_gear = out_byg[])
+if (isTRUE(SEX)) {
+  sex_map <- c("1" = "F", "2" = "M")
+
+  if ("SEX" %in% names(out_agg)) {
+    out_agg[, SEX := unname(sex_map[as.character(SEX)])]
+  }
+
+  if ("SEX" %in% names(out_byg)) {
+    out_byg[, SEX := unname(sex_map[as.character(SEX)])]
+  }
+}
+
+vcat("Done.")
+list(aggregated = out_agg[], by_gear = out_byg[])
 }
