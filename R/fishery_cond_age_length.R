@@ -34,6 +34,7 @@
 #' @param drop_unmapped Logical; drop observations whose AREA does not map into \code{region_def}.
 #' @param one_fleet Logical; if TRUE, pool across gears into a single fleet (fleet = 1).
 #' @param wgoa_cod Logical; optional WGOA recoding logic passed to the data pull.
+#' @param wgoa_cut  longitude to cut for WGOA, e.g. -158 would include all data west of -158 in the WGOA and remove from CGOA
 #' @param wt Numeric scalar multiplier applied to \code{Nsamp}.
 #' @param ageerr Integer age-error definition code written to the \code{Ageerr} column.
 #' @param by_sex Logical; if TRUE, split output by sex (Stock Synthesis Gender column).
@@ -57,6 +58,7 @@ fishery_cond_age_length <- function(con_akfin,
                                     drop_unmapped = TRUE,
                                     one_fleet = TRUE,
                                     wgoa_cod=TRUE,
+                                    wgoa_cut= -158,
                                     wt = 1,
                                     ageerr = 1,
                                     by_sex = FALSE) {   
@@ -78,6 +80,7 @@ fishery_cond_age_length <- function(con_akfin,
                               start_year = start_year,
                               end_year = end_year,
                               wgoa_cod = wgoa_cod,
+                              wgoa_cut = wgoa_cut,
                               max_wt = 5000,
                               drop_unmapped = drop_unmapped)
 

@@ -16,6 +16,7 @@ foreign_length_by_catch(
     620:649), EGOA = c(65, 650:659), AI = c(54, 540:544)),
   drop_unmapped = TRUE,
   wgoa_cod = TRUE,
+  wgoa_cut = -158,
   verbose = TRUE
 )
 }
@@ -75,7 +76,9 @@ not mapped are dropped (with a message when \code{verbose = TRUE}).}
 
 \item{drop_unmapped}{Logical; drop rows whose AREA does not map into \code{region_def}.}
 
-\item{wgoa_cod}{Logical; if \code{TRUE}, optionally remaps selected WGOA areas based on longitude.}
+\item{wgoa_cod}{Logical; if \code{TRUE}, optionally remaps selected WGOA areas based on longitude. #only works for years >= 2003}
+
+\item{wgoa_cut}{longitude to cut for WGOA, e.g. -158 would include all data west of -158 in the WGOA and remove from CGOA}
 
 \item{verbose}{Logical; emit summaries and progress messages.}
 }

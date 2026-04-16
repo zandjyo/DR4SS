@@ -34,12 +34,6 @@ missing age bins (including age-0 if required), and outputs a properly
 structured composition block with fleet definitions.
 }
 \details{
-The function assumes input data are structured as:
-\itemize{
-\item data[\link{1}][\link{1}]: survey age composition data
-\item data[\link{1}][\link{2}]: fishery age composition data
-}
-
 Required columns in input data:
 \itemize{
 \item AGE: age bin

@@ -65,7 +65,8 @@
 #'   If NULL, a single REGION_GRP is used (equal to `sp_area`) and default area filtering is used.
 #' @param drop_unmapped Logical. If TRUE and region_def is provided, drop rows whose AREA does not map
 #'   to a REGION_GRP. Default TRUE.
-#' @param wgoa_cod Logical. If TRUE, moves catch from NMFS area 620 west of -158 longitude into the 610 region group
+#' @param wgoa_cod Logical. If TRUE, moves catch from NMFS area 620 west of wgoa_cut longitude into the 610 region group
+#' @param wgoa_cut  longitude to cut for WGOA, e.g. -158 would include all data west of -158 in the WGOA and remove from CGOA
 #' @param return_predictor Logical. if TRUE returns age at length predictor model in list
 #' @return A list with two elements:
 #' \describe{
@@ -93,6 +94,7 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
                                 region_def = NULL,
                                 drop_unmapped = TRUE,
                                 wgoa_cod = TRUE,
+                                wgoa_cut = -158,
                                 return_predictor = FALSE) {
 
   age_length <- match.arg(age_length)
@@ -328,7 +330,7 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
   Dspcomp <- Dspcomp[EXTRAPOLATED_WEIGHT > 0 & NUMB > 0]
 
   if (isTRUE(wgoa_cod)) {
-    Dspcomp[AREA == 620 & LONDD_END <= -158]$AREA <- 610
+    Dspcomp[AREA == 620 & LONDD_END <= wgoa_cut]$AREA <- 610
   }
 
   # WED/MONTH_WED derived from HDAY
@@ -633,7 +635,7 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
     srv_age <- add_region_group(srv_age, region_def = region_def, area_col = "NMFS_AREA", drop_unmapped = drop_unmapped)
 
     if (isTRUE(wgoa_cod)) {
-      srv_age[NMFS_AREA == 620 & LONGITUDE_DD_END <= -158]$NMFS_AREA <- 610
+      srv_age[NMFS_AREA == 620 & LONGITUDE_DD_END <= wgoa_cut]$NMFS_AREA <- 610
     }
 
     if (isTRUE(verbose)) {
@@ -649,6 +651,7 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
       start_year = start_year,
       end_year = end_year,
       wgoa_cod = wgoa_cod,
+      wgoa_cut = wgoa_cut,
       max_wt = 50,
       drop_unmapped = drop_unmapped
     )
@@ -726,7 +729,8 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
   CATCHT <- CATCHT[YEAR >= start_year & YEAR <= end_year][TONS > 0]
 
   if (isTRUE(wgoa_cod)) {
-    CATCHT[AREA == 620 & ADFG_AREA <= 580000]$AREA <- 610
+    cut<-(wgoa_cut+100)*-10000
+    CATCHT[AREA == 620 & ADFG_AREA <= cut]$AREA <- 610
   }
 
   CATCHT[, AREA := suppressWarnings(as.integer(as.character(AREA)))]

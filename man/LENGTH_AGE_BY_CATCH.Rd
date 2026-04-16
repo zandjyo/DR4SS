@@ -24,6 +24,7 @@ LENGTH_AGE_BY_CATCH(
   region_def = NULL,
   drop_unmapped = TRUE,
   wgoa_cod = TRUE,
+  wgoa_cut = -158,
   return_predictor = FALSE
 )
 }
@@ -69,7 +70,9 @@ If NULL, a single REGION_GRP is used (equal to \code{sp_area}) and default area 
 \item{drop_unmapped}{Logical. If TRUE and region_def is provided, drop rows whose AREA does not map
 to a REGION_GRP. Default TRUE.}
 
-\item{wgoa_cod}{Logical. If TRUE, moves catch from NMFS area 620 west of -158 longitude into the 610 region group}
+\item{wgoa_cod}{Logical. If TRUE, moves catch from NMFS area 620 west of wgoa_cut longitude into the 610 region group}
+
+\item{wgoa_cut}{longitude to cut for WGOA, e.g. -158 would include all data west of -158 in the WGOA and remove from CGOA}
 
 \item{return_predictor}{Logical. if TRUE returns age at length predictor model in list}
 }

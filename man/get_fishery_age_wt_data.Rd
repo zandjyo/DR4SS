@@ -13,6 +13,7 @@ get_fishery_age_wt_data(
   end_year = 2025,
   max_wt = 50,
   wgoa_cod = TRUE,
+  wgoa_cut = -158,
   drop_unmapped = TRUE
 )
 }
@@ -30,8 +31,9 @@ across regions (non-overlapping).}
 
 \item{max_wt}{Maximum plausible individual weight. Weights of 0 or > \code{max_wt} are set to \code{NA}.}
 
-\item{wgoa_cod}{Logical; if \code{TRUE}, applies a WGOA recode for NMFS area 620 to 610 based on longitude
-(requires longitude field present in the SQL output).}
+\item{wgoa_cod}{Logical. If TRUE, moves catch from NMFS area 620 west of wgoa_cut longitude into the 610 region group}
+
+\item{wgoa_cut}{longitude to cut for WGOA, e.g. -158 would include all data west of -158 in the WGOA and remove from CGOA}
 
 \item{drop_unmapped}{Logical; if \code{TRUE}, rows whose \code{NMFS_AREA} does not map into \code{region_def}
 are removed.}

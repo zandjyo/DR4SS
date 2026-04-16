@@ -11,7 +11,8 @@ get_blend_catch_region(
   season_def,
   start_year,
   end_year,
-  wgoa_cod = TRUE
+  wgoa_cod = TRUE,
+  wgoa_cut = -158
 )
 }
 \arguments{
@@ -44,7 +45,9 @@ Months not included in \code{season_def} are dropped from seasonal outputs.}
 
 \item{wgoa_cod}{Logical. If TRUE, applies special handling for WGOA Pacific cod,
 reassigning certain AREA 620 records (based on ADFG_AREA) to match AREA 610
-regional grouping.}
+regional grouping. Note that this only works for data >=2003 and must have 610 as WGOA and 620 in the CGOA groups.}
+
+\item{wgoa_cut}{longitude to cut for WGOA, e.g. -158 would include all data west of -158 in the WGOA and remove from CGOA}
 }
 \value{
 A \code{data.table} containing blended catch data with standardized

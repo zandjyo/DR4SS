@@ -16,6 +16,7 @@ fishery_cond_age_length(
   drop_unmapped = TRUE,
   one_fleet = TRUE,
   wgoa_cod = TRUE,
+  wgoa_cut = -158,
   wt = 1,
   ageerr = 1,
   by_sex = FALSE
@@ -41,6 +42,8 @@ fishery_cond_age_length(
 \item{one_fleet}{Logical; if TRUE, pool across gears into a single fleet (fleet = 1).}
 
 \item{wgoa_cod}{Logical; optional WGOA recoding logic passed to the data pull.}
+
+\item{wgoa_cut}{longitude to cut for WGOA, e.g. -158 would include all data west of -158 in the WGOA and remove from CGOA}
 
 \item{wt}{Numeric scalar multiplier applied to \code{Nsamp}.}
 

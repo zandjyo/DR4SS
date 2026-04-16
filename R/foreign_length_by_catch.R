@@ -104,7 +104,8 @@
 #'   not mapped are dropped (with a message when \code{verbose = TRUE}).
 #' @param region_def Named list mapping region labels to AREA codes. Must be non-overlapping.
 #' @param drop_unmapped Logical; drop rows whose AREA does not map into \code{region_def}.
-#' @param wgoa_cod Logical; if \code{TRUE}, optionally remaps selected WGOA areas based on longitude.
+#' @param wgoa_cod Logical; if \code{TRUE}, optionally remaps selected WGOA areas based on longitude. #only works for years >= 2003
+#' @param wgoa_cut longitude to cut for WGOA, e.g. -158 would include all data west of -158 in the WGOA and remove from CGOA
 #' @param verbose Logical; emit summaries and progress messages.
 #'
 #' @return A named list with two \code{data.table}s:
@@ -129,6 +130,7 @@ foreign_length_by_catch <- function(con_akfin,
                                                       AI = c(54, 540:544)),
                                     drop_unmapped = TRUE,
                                     wgoa_cod = TRUE,
+                                    wgoa_cut = -158,
                                     verbose = TRUE) {
 
   if (!requireNamespace("data.table", quietly = TRUE)) stop("data.table required.", call. = FALSE)
@@ -540,7 +542,9 @@ foreign_length_by_catch <- function(con_akfin,
   data.table::setnames(Fspcomp, toupper(names(Fspcomp)))
 
   Fspcomp[AREA < 100, AREA := AREA * 10]
-  if (isTRUE(wgoa_cod)) Fspcomp[AREA %in% 620 & LONGITUDE >= 15800, AREA := 610L]
+  
+  if (isTRUE(wgoa_cod)){cut<- wgoa_cut*-100
+                        Fspcomp[AREA %in% 620 & LONGITUDE >= cut, AREA := 610L]}
 
   Fspcomp[, MONTH := as.numeric(MONTH)]
   Fspcomp[, QUARTER := floor((MONTH / 3) - 0.3) + 1]

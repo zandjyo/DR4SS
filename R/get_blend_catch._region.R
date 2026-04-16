@@ -33,8 +33,8 @@
 #' @param end_year Integer. Last year (inclusive) to include in the query.
 #' @param wgoa_cod Logical. If TRUE, applies special handling for WGOA Pacific cod,
 #'   reassigning certain AREA 620 records (based on ADFG_AREA) to match AREA 610
-#'   regional grouping.
-#' @param wgoa_cut  lognitude to cut for WGOA, e.g. -158  to include all data west of -158 in the WGOA and remove from CGOA
+#'   regional grouping. Note that this only works for data >=2003 and must have 610 as WGOA and 620 in the CGOA groups.
+#' @param wgoa_cut  longitude to cut for WGOA, e.g. -158 would include all data west of -158 in the WGOA and remove from CGOA
 #'
 #' @return A \code{data.table} containing blended catch data with standardized
 #'   and grouped fields, including:
@@ -237,7 +237,7 @@ add_region_group <- function(dt, region_def, area_col = "AREA", drop_unmapped = 
 
   d <- add_region_group(dt=d, region_def=region_def, area_col = "AREA", drop_unmapped = TRUE)
 
-  cut<-(wgoa_cut+100)*-10000
+  cut<- (wgoa_cut + 100) * -10000
   if(isTRUE(wgoa_cod)){d[AREA==620 & ADFG_AREA >= cut]$REGION_GRP<-unique(d[AREA==610]$REGION_GRP)}
 
   # expected columns from your query

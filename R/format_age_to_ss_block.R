@@ -7,11 +7,6 @@
 #' missing age bins (including age-0 if required), and outputs a properly
 #' structured composition block with fleet definitions.
 #'
-#' The function assumes input data are structured as:
-#' \itemize{
-#'   \item data[[1]][[1]]: survey age composition data
-#'   \item data[[1]][[2]]: fishery age composition data
-#' }
 #'
 #' Required columns in input data:
 #' \itemize{
