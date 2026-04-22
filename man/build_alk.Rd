@@ -4,7 +4,7 @@
 \alias{build_alk}
 \title{Build age-length key (ALK) from raw specimen data}
 \usage{
-build_alk(alk_raw_df, plus_age = NULL)
+build_alk(alk_raw_df, plus_age = NULL, length_bins = NULL)
 }
 \arguments{
 \item{alk_raw_df}{A data.frame or data.table containing raw aged-fish
@@ -15,6 +15,11 @@ data with at least the following columns:
 \item{plus_age}{Optional numeric (default = \code{NULL}).
 If provided, all ages greater than or equal to \code{plus_age}
 are grouped into a plus group prior to constructing the ALK.}
+
+\item{length_bins}{Optional numeric vector (default = \code{NULL}).
+If provided, fish lengths are binned using these breakpoints before
+constructing the ALK. Output \code{LENGTH} values will be the bin
+midpoints.}
 }
 \value{
 A data.frame with the following columns:
@@ -23,7 +28,7 @@ A data.frame with the following columns:
 \item{REGION}{Survey region.}
 \item{SPECIES_CODE}{Species code.}
 \item{SEX}{Sex category.}
-\item{LENGTH}{Length bin.}
+\item{LENGTH}{Length bin midpoint or original length value.}
 \item{AGE}{Age (or plus group if specified).}
 \item{N}{Number of fish at age within length bin.}
 \item{TOTAL_N}{Total number of fish in length bin.}
@@ -40,15 +45,6 @@ The function aggregates raw specimen-level data to counts-at-age
 within each length bin and converts these to proportions
 \eqn{P(\text{AGE} \mid \text{LENGTH})}.
 
-The ALK is constructed by first counting the number of observations
-at each combination of YEAR, REGION, SPECIES_CODE, SEX, LENGTH, and AGE.
-These counts are then normalized within each
-YEAR-REGION-SPECIES_CODE-SEX-LENGTH group to produce conditional
-probabilities.
-
-If a plus group is specified, ages are collapsed prior to aggregation,
-and proportions are recalculated accordingly.
-
-This function assumes that input data have already been filtered to
-include only valid aged specimens.
+If \code{length_bins} is supplied, raw lengths are first assigned to
+bins and the ALK is then constructed on the binned lengths.
 }

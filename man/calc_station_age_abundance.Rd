@@ -2,13 +2,15 @@
 % Please edit documentation in R/calc_station_age_abundance.R
 \name{calc_station_age_abundance}
 \alias{calc_station_age_abundance}
-\title{Calculate station-level abundance at age from CPUE and ALK}
+\title{Calculate haul-level abundance at age from CPUE and ALK(s)}
 \usage{
 calc_station_age_abundance(
   cpue_len_df,
   alk_df,
   plus_age = NULL,
-  drop_unsexed = TRUE
+  drop_unsexed = TRUE,
+  length_bins = NULL,
+  return_diagnostics = FALSE
 )
 }
 \arguments{
@@ -18,26 +20,40 @@ length-frequency data with required columns:
 \code{SPECIES_CODE}, \code{SEX}, \code{LENGTH}, \code{FREQUENCY},
 \code{MID_LAT}, and \code{MID_LON}.}
 
-\item{alk_df}{A data.frame or data.table containing an age-length key
-with columns:
+\item{alk_df}{Either:
+\itemize{
+\item A single ALK data.frame/data.table with columns
 \code{YEAR}, \code{REGION}, \code{SPECIES_CODE}, \code{SEX},
-\code{LENGTH}, \code{AGE}, and \code{ALK_PROP}.}
+\code{LENGTH}, \code{AGE}, and \code{ALK_PROP}, or
+\item A named list of fallback ALKs as returned by
+\code{build_alk_hierarchy()}, containing:
+\code{alk_y_r_s}, \code{alk_r_s}, \code{alk_s}, and
+\code{alk_all}.
+}}
 
 \item{plus_age}{Optional numeric (default = \code{NULL}).
 If provided, all ages greater than or equal to \code{plus_age}
-are collapsed into a plus group. The plus group is applied at both
-the ALK level and the final output.}
+are collapsed into a plus group.}
 
 \item{drop_unsexed}{Logical (default = \code{TRUE}).
-If \code{TRUE}, removes observations with unsexed fish from both
-the CPUE/length data and the ALK prior to calculation.}
+If \code{TRUE}, removes unsexed fish from both the CPUE/length data
+and the ALK(s) before calculation.}
+
+\item{length_bins}{Optional numeric vector (default = \code{NULL}).
+If provided, CPUE/length data are binned using these breakpoints
+before applying the ALK. These bins should match those used in
+\code{build_alk()} or \code{build_alk_hierarchy()}.}
+
+\item{return_diagnostics}{Logical (default = \code{FALSE}).
+If \code{TRUE}, returns a list containing the abundance-at-age
+output, ALK usage summary, and joined haul-length-at-age data.}
 }
 \value{
-A data.frame containing station-level abundance-at-age with:
+By default, a data.frame containing haul-level abundance-at-age:
 \describe{
 \item{YEAR}{Integer survey year.}
 \item{REGION}{Survey region.}
-\item{HAULJOIN}{Station (haul) identifier.}
+\item{HAULJOIN}{Haul identifier.}
 \item{SPECIES_CODE}{Species code.}
 \item{SEX}{Sex category.}
 \item{AGE}{Age or plus group (if specified).}
@@ -45,37 +61,44 @@ A data.frame containing station-level abundance-at-age with:
 \item{MID_LAT}{Midpoint latitude of haul.}
 \item{MID_LON}{Midpoint longitude of haul.}
 }
+
+If \code{return_diagnostics = TRUE}, returns a list with:
+\describe{
+\item{abundance_at_age}{Final haul-level abundance-at-age output.}
+\item{alk_usage}{Summary of haul-length abundance matched to each
+ALK level.}
+\item{joined_data}{Expanded haul-length-age table after ALK
+application.}
+}
 }
 \description{
-Estimates abundance-at-age (numbers per km^2) at the station level
-by combining station CPUE, length-frequency data, and an
-age-length key (ALK).
+Estimates abundance-at-age (numbers per km^2) at the haul level by
+combining haul CPUE, length-frequency data, and either a single
+age-length key (ALK) or a hierarchy of fallback ALKs.
 }
 \details{
-The method partitions total station CPUE into sex-specific and
+The function partitions total haul CPUE into sex-specific and
 length-specific components and then applies the conditional
 probabilities from the ALK to derive abundance at age.
 
 The calculation proceeds as follows:
 \enumerate{
-\item Station-level CPUE is partitioned among sexes based on
-observed length-frequency counts.
-\item Within each sex, CPUE is partitioned across length bins
-using observed length proportions.
-\item The age-length key (\eqn{P(\text{AGE} \mid \text{LENGTH})})
-is applied to derive abundance at age.
+\item Total haul CPUE is partitioned among sexes based on observed
+length-frequency counts.
+\item Within each sex, CPUE is partitioned across length bins using
+observed length proportions.
+\item A single ALK or fallback ALK hierarchy is applied to derive
+abundance at age.
 \item Abundance is summed across length bins to obtain total
-abundance at age for each station.
+abundance at age for each haul.
 }
 
-If a plus group is specified, ages are collapsed prior to final
-aggregation and reported as character values (e.g., \code{"10+"}).
-
-The function assumes that:
-\itemize{
-\item CPUE is constant within each station-year-species group.
-\item Length-frequency data are representative of the station.
-\item The ALK is appropriate for the corresponding YEAR, REGION,
-SPECIES_CODE, and SEX.
+If a hierarchy of ALKs is supplied, matching proceeds from most
+specific to least specific:
+\enumerate{
+\item YEAR + REGION + SPECIES_CODE + SEX + LENGTH
+\item REGION + SPECIES_CODE + SEX + LENGTH
+\item SPECIES_CODE + SEX + LENGTH
+\item SPECIES_CODE + LENGTH
 }
 }

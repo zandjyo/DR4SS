@@ -1,4 +1,3 @@
-
 #' Build age-length key (ALK) from raw specimen data
 #'
 #' Constructs an age-length key (ALK) by calculating the conditional
@@ -18,13 +17,18 @@
 #'   If provided, all ages greater than or equal to \code{plus_age}
 #'   are grouped into a plus group prior to constructing the ALK.
 #'
+#' @param length_bins Optional numeric vector (default = \code{NULL}).
+#'   If provided, fish lengths are binned using these breakpoints before
+#'   constructing the ALK. Output \code{LENGTH} values will be the bin
+#'   midpoints.
+#'
 #' @return A data.frame with the following columns:
 #' \describe{
 #'   \item{YEAR}{Integer survey year.}
 #'   \item{REGION}{Survey region.}
 #'   \item{SPECIES_CODE}{Species code.}
 #'   \item{SEX}{Sex category.}
-#'   \item{LENGTH}{Length bin.}
+#'   \item{LENGTH}{Length bin midpoint or original length value.}
 #'   \item{AGE}{Age (or plus group if specified).}
 #'   \item{N}{Number of fish at age within length bin.}
 #'   \item{TOTAL_N}{Total number of fish in length bin.}
@@ -32,20 +36,13 @@
 #' }
 #'
 #' @details
-#' The ALK is constructed by first counting the number of observations
-#' at each combination of YEAR, REGION, SPECIES_CODE, SEX, LENGTH, and AGE.
-#' These counts are then normalized within each
-#' YEAR-REGION-SPECIES_CODE-SEX-LENGTH group to produce conditional
-#' probabilities.
-#'
-#' If a plus group is specified, ages are collapsed prior to aggregation,
-#' and proportions are recalculated accordingly.
-#'
-#' This function assumes that input data have already been filtered to
-#' include only valid aged specimens.
+#' If \code{length_bins} is supplied, raw lengths are first assigned to
+#' bins and the ALK is then constructed on the binned lengths.
 #'
 #' @export
-build_alk <- function(alk_raw_df, plus_age = NULL) {
+build_alk <- function(alk_raw_df,
+                      plus_age = NULL,
+                      length_bins = NULL) {
   req <- c("YEAR", "REGION", "SPECIES_CODE", "SEX", "LENGTH", "AGE")
 
   if (!all(req %in% names(alk_raw_df))) {
@@ -55,13 +52,18 @@ build_alk <- function(alk_raw_df, plus_age = NULL) {
 
   x <- alk_raw_df
 
-  x$YEAR <- as.integer(x$YEAR)
+  x$YEAR   <- as.integer(x$YEAR)
   x$LENGTH <- as.numeric(x$LENGTH)
-  x$AGE <- as.numeric(x$AGE)
+  x$AGE    <- as.numeric(x$AGE)
 
   if (any(is.na(x$YEAR))) stop("YEAR in alk_raw_df contains missing/non-numeric values.")
   if (any(is.na(x$LENGTH))) stop("LENGTH in alk_raw_df contains missing/non-numeric values.")
   if (any(is.na(x$AGE))) stop("AGE in alk_raw_df contains missing/non-numeric values.")
+
+  if (!is.null(length_bins)) {
+    x$LENGTH <- bin_length_values(x$LENGTH, length_bins = length_bins)
+    x <- x[!is.na(x$LENGTH), , drop = FALSE]
+  }
 
   if (!is.null(plus_age)) {
     plus_age <- as.numeric(plus_age)
