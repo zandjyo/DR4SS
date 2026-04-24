@@ -8,6 +8,7 @@
 #'
 #' @return Numeric vector of length-bin midpoints.
 #' @noRd
+#' @export
 bin_length_values <- function(x, length_bins) {
   if (is.null(length_bins)) {
     return(as.numeric(x))

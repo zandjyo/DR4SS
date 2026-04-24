@@ -149,7 +149,8 @@ apply_alk_hierarchy <- function(freq_df, alk_list) {
     stop("No rows matched any ALK level.")
   }
 
-  dat2 <- do.call(rbind, matched)
+  dat2 <- data.table::rbindlist(matched, fill = TRUE)
+  dat2 <- as.data.frame(dat2)
 
   if (nrow(remaining) > 0) {
     warning("Some haul-sex-length rows still had no ALK match after fallback.")
