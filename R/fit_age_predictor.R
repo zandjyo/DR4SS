@@ -8,7 +8,7 @@
 #' * across YEARS **within** a region (missing YEAR random effects set to 0 at predict-time)
 #' * across AREAS **within** a region (missing AREA random effects set to 0 at predict-time)
 #'
-#' @param fish_dt Fishery aged data. Must include YEAR, QUARTER, LENGTH (cm), AGE, SEX (F/M/U), AREA.
+#' @param fish_dt Fishery aged data. Must include YEAR, GEAR, QUARTER, LENGTH (cm), AGE, SEX (F/M/U), AREA.
 #'   REGION_GRP is required to fit separate regional models; if missing, all data are treated as one region ("ALL").
 #' @param srv_dt Survey aged data (Q3). Must include YEAR, LENGTH_MM (mm), AGE, SEX, and optionally NMFS_AREA/AREA.
 #'   REGION_GRP is required to fit separate regional models; if missing, all data are treated as one region ("ALL").
@@ -144,18 +144,58 @@ fit_age_predictor <- function(fish_dt,
       k_s <- safe_k(k_age_survey, data.table::uniqueN(s_fit$AGE_G))
     }
 
-    survey_terms <- c()
-    if (n_sex_s >= 2) survey_terms <- c(survey_terms, "SEX_F")
-    if (n_sex_s >= 2) {
-      survey_terms <- c(survey_terms, sprintf("s(AGE_G, by = SEX_F, k = %d)", k_s))
-    } else {
-      survey_terms <- c(survey_terms, sprintf("s(AGE_G, k = %d)", k_s))
-    }
-    if (n_year_s >= 2) survey_terms <- c(survey_terms, "s(YEAR_F, bs = 're')")
-    if (n_area_s >= 2) survey_terms <- c(survey_terms, "s(AREA_F, bs = 're')")
+   # survey_terms <- c()
+   # if (n_sex_s >= 2) survey_terms <- c(survey_terms, "SEX_F")
+   # if (n_sex_s >= 2) {
+   #   survey_terms <- c(survey_terms, sprintf("s(AGE_G, by = SEX_F, k = %d)", k_s))
+   # } else {
+   #   survey_terms <- c(survey_terms, sprintf("s(AGE_G, k = %d)", k_s))
+   # }
+   # if (n_year_s >= 2) survey_terms <- c(survey_terms, "s(YEAR_F, bs = 're')")
+   # if (n_area_s >= 2) survey_terms <- c(survey_terms, "s(AREA_F, bs = 're')")
 
-    survey_form <- stats::as.formula(paste("LENGTH ~", paste(survey_terms, collapse = " + ")))
-    survey_fit <- mgcv::gam(survey_form, data = s_fit, method = "REML")
+   # survey_form <- stats::as.formula(paste("LENGTH ~", paste(survey_terms, collapse = " + ")))
+   # survey_fit <- mgcv::gam(survey_form, data = s_fit, method = "REML")
+    survey_terms <- c()
+
+    # Main sex effect
+    if (n_sex_s >= 2) {
+      survey_terms <- c(survey_terms, "SEX_F")
+    }
+
+    # Shared length-at-age curve across sexes
+    survey_terms <- c(
+      survey_terms,
+      sprintf("s(AGE_G, k = %d)", k_s)
+    )
+
+    # Sex-specific deviations from the shared age curve
+    if (n_sex_s >= 2) {
+      survey_terms <- c(
+        survey_terms,
+        sprintf("s(AGE_G, by = SEX_F, k = %d)", k_s)
+      )
+    }
+
+    if (n_year_s >= 2) {
+      survey_terms <- c(survey_terms, "s(YEAR_F, bs = 're')")
+    }
+
+    if (n_area_s >= 2) {
+      survey_terms <- c(survey_terms, "s(AREA_F, bs = 're')")
+    }
+
+    survey_form <- stats::as.formula(
+      paste("LENGTH ~", paste(survey_terms, collapse = " + "))
+    )
+
+    survey_fit <- mgcv::gam(
+      survey_form,
+      data = s_fit,
+      method = "REML",
+      select = FALSE
+    )
+
 
     # ---- fishery delta ----
     f_fit <- data.table::copy(f_r)
@@ -213,19 +253,73 @@ fit_age_predictor <- function(fish_dt,
       k_d <- safe_k(k_age_delta, data.table::uniqueN(f_fit$AGE_G))
     }
 
-    delta_terms <- c()
-    if (n_q_f >= 2) delta_terms <- c(delta_terms, "Q_F")
-    if (n_q_f >= 2) {
-      delta_terms <- c(delta_terms, sprintf("s(AGE_G, by = Q_F, k = %d)", k_d))
-    } else {
-      delta_terms <- c(delta_terms, sprintf("s(AGE_G, k = %d)", k_d))
-    }
-    if (n_sex_f >= 2) delta_terms <- c(delta_terms, "SEX_F")
-    if (n_year_f >= 2) delta_terms <- c(delta_terms, "s(YEAR_F, bs = 're')")
-    if (n_area_f >= 2) delta_terms <- c(delta_terms, "s(AREA_F, bs = 're')")
+    #delta_terms <- c()
+    #if (n_q_f >= 2) delta_terms <- c(delta_terms, "Q_F")
+    #if (n_q_f >= 2) {
+    #  delta_terms <- c(delta_terms, sprintf("s(AGE_G, by = Q_F, k = %d)", k_d))
+    #} else {
+    #  delta_terms <- c(delta_terms, sprintf("s(AGE_G, k = %d)", k_d))
+    #}
+    #if (n_sex_f >= 2) delta_terms <- c(delta_terms, "SEX_F")
+    #if (n_year_f >= 2) delta_terms <- c(delta_terms, "s(YEAR_F, bs = 're')")
+    #if (n_area_f >= 2) delta_terms <- c(delta_terms, "s(AREA_F, bs = 're')")
 
-    delta_form <- stats::as.formula(paste("DELTA ~", paste(delta_terms, collapse = " + ")))
-    delta_fit <- mgcv::gam(delta_form, data = f_fit, method = "REML")
+    #delta_form <- stats::as.formula(paste("DELTA ~", paste(delta_terms, collapse = " + ")))
+    #delta_fit <- mgcv::gam(delta_form, data = f_fit, method = "REML")
+
+    # choose k safely for sex-by-age delta smooth
+    if (n_sex_f >= 2) {
+      k_d_sex <- safe_k_by(k_age_delta, f_fit$AGE_G, f_fit$SEX_F)
+    } else {
+      k_d_sex <- safe_k(k_age_delta, data.table::uniqueN(f_fit$AGE_G))
+    }
+
+    # choose k safely for quarter-by-age delta smooth
+    if (n_q_f >= 2) {
+      k_d_q <- safe_k_by(k_age_delta, f_fit$AGE_G, f_fit$Q_F)
+    } else {
+      k_d_q <- safe_k(k_age_delta, data.table::uniqueN(f_fit$AGE_G))
+    }
+
+    delta_terms <- c()
+
+    if (n_q_f >= 2) {
+      delta_terms <- c(delta_terms, "Q_F")
+    }
+
+    if (n_sex_f >= 2) {
+      delta_terms <- c(delta_terms, "SEX_F")
+    }
+
+    # Overall age pattern in fishery delta
+    delta_terms <- c(delta_terms, sprintf("s(AGE_G, k = %d)", k_d))
+
+    # Sex-specific deviation from the overall age pattern
+    if (n_sex_f >= 2) {
+      k_d_sex <- safe_k_by(k_age_delta, f_fit$AGE_G, f_fit$SEX_F)
+      k_d_sex <- min(k_d_sex, 5L)
+      delta_terms <- c(delta_terms, sprintf("s(AGE_G, by = SEX_F, k = %d)", k_d_sex))
+    }
+
+    if (n_year_f >= 2) {
+      delta_terms <- c(delta_terms, "s(YEAR_F, bs = 're')")
+    }
+
+    if (n_area_f >= 2) {
+      delta_terms <- c(delta_terms, "s(AREA_F, bs = 're')")
+    }
+
+    delta_form <- stats::as.formula(
+      paste("DELTA ~", paste(delta_terms, collapse = " + "))
+    )
+
+    delta_fit <- mgcv::gam(
+      delta_form,
+      data = f_fit,
+      method = "REML",
+      select = TRUE
+    )
+
 
     # ---- priors from fishery ages (region-specific) ----
     prior_pool <- f_r[, .N, by = .(AREA_K, SEX, AGE_G)]

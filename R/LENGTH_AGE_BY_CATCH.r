@@ -728,6 +728,7 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
   data.table::setnames(CATCHT, toupper(names(CATCHT)))
   CATCHT <- CATCHT[YEAR >= start_year & YEAR <= end_year][TONS > 0]
 
+  cut<-(wgoa_cut+100)*-10000
   if (isTRUE(wgoa_cod)) {
     cut<-(wgoa_cut+100)*-10000
     CATCHT[AREA == 620 & ADFG_AREA <= cut]$AREA <- 610
@@ -774,6 +775,9 @@ LENGTH_AGE_BY_CATCH <- function(con_akfin,
   CATCHT4 <- merge(CATCHT4, xt_YG,  by = c("REGION_GRP","YEAR","GEAR"), all.x = TRUE)
   CATCHT4 <- merge(CATCHT4, xt_Y,   by = c("REGION_GRP","YEAR"), all.x = TRUE)
   CATCHT4[, SPECIES := as.numeric(SPECIES)]
+
+  #CATCHT4$AREA_K<-as.character(CATCHT4$AREA2/10)
+  #merge(ALL_DATA,CATCHT4,by=c("YEAR","REGION_GRP","AREA_K","GEAR","MONTH"))
 
   # ------------------------------------------------------------
   # 6) Length data prep for weighting

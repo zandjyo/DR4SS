@@ -4,15 +4,16 @@
 
 This repository is maintained under **afsc-assessments/DR4SS-NP** and is intended for **internal NOAA/AFSC analytical use**.
 
-> ⚠️ **Data Access Notice**  
+> ⚠️ \*\*Data Access Notice\*\*  
 > This package connects to password-protected AFSC and AKFIN databases. It is not intended for public deployment.
 
----
+\---
 
 ## What this package does
-use**, not a centralized Shiny server
 
----
+use\*\*, not a centralized Shiny server
+
+\---
 
 ## Installation
 
@@ -20,45 +21,47 @@ use**, not a centralized Shiny server
 
 ```r
 install.packages("remotes")
-remotes::install_github("afsc-assessments/DR4SS-NP")
+remotes::install\_github("afsc-assessments/DR4SS-NP")
 ```
 
----
+\---
 
 ## Running the dashboard
 
 Once installed, launch the dashboard with:
 
 ```r
-library(DR4SS-NP)
-launch_DR4SS()
+library(DR4SS)
+launch\_DR4SS()
 ```
 
 This will start the Shiny application in your local R session.
 
----
+\---
 
 ## Credentials and database access
 
 The dashboard requires access to AFSC and AKFIN databases.
 
-- Credentials are managed using the **keyring** package
-- On first use, if credentials are not found, the app will prompt you to enter them
-- Credentials are stored securely in your system credential store (not in the repo)
+* Credentials are managed using the **keyring** package
+* On first use, if credentials are not found, the app will prompt you to enter them
+* Credentials are stored securely in your system credential store (not in the repo)
 
 Required keyring services:
-- `afsc`
-- `akfin`
+
+* `afsc`
+* `akfin`
 
 No passwords are written to disk or saved in plaintext.
 
----
+\---
 
 ## Requirements
 
 ### R packages
 
 Core dependencies:
+
 ```r
 datasets 
   data.table
@@ -111,12 +114,14 @@ datasets
 ```
 
 Optional (recommended):
+
 ```r
 keyring           # secure credential storage
 shinycssloaders   # loading spinners
 ```
 
 Install missing packages with:
+
 ```r
 install.packages(c(
   "shiny", "ggplot2", "bslib", "dplyr", "lubridate",
@@ -124,12 +129,12 @@ install.packages(c(
 ))
 ```
 
----
+\---
 
 ## Intended workflow
 
 1. Install and load the package
-2. Run `launch_DR4SS()`
+2. Run `launch\_DR4SS()`
 3. Set species, dates, region, and gear filters
 4. Click **Pull data only** to query databases
 5. Click **Render plots** to generate visualizations
@@ -137,30 +142,31 @@ install.packages(c(
 
 This separation avoids unnecessary recomputation and supports iterative in-season analysis.
 
----
+\---
 
 ## Package structure (high level)
 
-- `R/` – helper functions for data access and plotting
-- `inst/shiny/` – Shiny application code
-- `launch_DR4SS()` – wrapper to start the app
+* `R/` – helper functions for data access and plotting
+* `inst/shiny/` – Shiny application code
+* `launch\_DR4SS()` – wrapper to start the app
 
 The Shiny app is intentionally bundled inside the package to ensure consistent behavior across analysts.
 
----
+\---
 
 ## Security and data sensitivity
-- This package should only be used on approved systems
-- Do not deploy to public Shiny servers without removing sensitive data access
 
----
+* This package should only be used on approved systems
+* Do not deploy to public Shiny servers without removing sensitive data access
+
+\---
 
 ## Disclaimer
 
 This software is provided **as-is** for internal scientific and management support.  
 It is not an official NOAA product and carries no warranty or guarantee of support.
 
----
+\---
 
 ## Maintainer
 
@@ -168,61 +174,66 @@ Steve Barbeaux Steve.barbeaux@noaa.gov
 Questions, issues, or enhancements should be coordinated within the AFSC assessment community.
 
 
+
 ## Additional information on methods
 
 
 
-## Write-up: `fit_age_predictor()` and `predict_age_from_lf()`
+## Write-up: `fit\_age\_predictor()` and `predict\_age\_from\_lf()`
 
 This document describes the statistical framework used to convert
 fishery length-frequency (LF) data into predicted ages.
 
-------------------------------------------------------------------------
+\---
 
-## 1) Model Overview
+## 1\) Model Overview
 
 The workflow has two stages:
 
-1.  **fit_age_predictor()**
-    -   Fits statistical models for expected length-at-age using:
-        -   A survey-based Q3 backbone model
-        -   A fishery quarter-specific delta model
-    -   Builds empirical age priors from fishery-aged samples
-2.  **predict_age_from_lf()**
-    -   Uses Bayes' rule to compute posterior age probabilities
-    -   Returns:
-        -   Expected age compositions
-        -   Posterior distributions
-        -   Integer ages (MAP or sampled)
+1. **fit\_age\_predictor()**
 
-------------------------------------------------------------------------
+   * Fits statistical models for expected length-at-age using:
 
-## 2) Notation
+     * A survey-based Q3 backbone model
+     * A fishery quarter-specific delta model
+   * Builds empirical age priors from fishery-aged samples
+2. **predict\_age\_from\_lf()**
+
+   * Uses Bayes' rule to compute posterior age probabilities
+   * Returns:
+
+     * Expected age compositions
+     * Posterior distributions
+     * Integer ages (MAP or sampled)
+
+\---
+
+## 2\) Notation
 
 Let:
 
--   L = observed length (cm)
--   A = age (integer)
--   A_G = plus-grouped age
--   S ∈ {F, M}
--   q ∈ {1,2,3,4} (quarter)
--   y = year
--   k = spatial stratum (AREA_K)
--   n = count of fish represented by an LF row
+* L = observed length (cm)
+* A = age (integer)
+* A\_G = plus-grouped age
+* S ∈ {F, M}
+* q ∈ {1,2,3,4} (quarter)
+* y = year
+* k = spatial stratum (AREA\_K)
+* n = count of fish represented by an LF row
 
 Plus-group definition:
 
-A_G = min(max(A, 0), A_max)
+A\_G = min(max(A, 0), A\_max)
 
-------------------------------------------------------------------------
+\---
 
-## 3) Survey Backbone Model (Q3)
+## 3\) Survey Backbone Model (Q3)
 
 Survey observations are treated as quarter 3 data.
 
 The expected length-at-age model:
 
-μ_Q3(a,s,y,k) = E\[L \| A_G=a, S=s, Y=y, K=k, q=3\]
+μ\_Q3(a,s,y,k) = E\[L | A\_G=a, S=s, Y=y, K=k, q=3]
 
 Fitted using a GAM:
 
@@ -231,17 +242,17 @@ L = β0 + βS(s) + fS(a;s) + bY(y) + bK(k) + ε
 Where: - fS(a;s) is a smooth of age by sex - bY(y) and bK(k) are random
 effects - ε is residual error
 
-------------------------------------------------------------------------
+\---
 
-## 4) Fishery Quarter Delta Model
+## 4\) Fishery Quarter Delta Model
 
 Fishery data occur in all quarters. Length-at-age in quarter q is:
 
-μ_q(a,s,y,k) = μ_Q3(a,s,y,k) + δ_q(a,s,y,k)
+μ\_q(a,s,y,k) = μ\_Q3(a,s,y,k) + δ\_q(a,s,y,k)
 
 For fishery observations:
 
-Δ = L_obs − μ_Q3
+Δ = L\_obs − μ\_Q3
 
 Delta model:
 
@@ -250,93 +261,93 @@ Delta model:
 Where: - gQ(a;q) is a quarter-specific smooth of age - uY(y), uK(k) are
 random effects - η is residual error
 
-------------------------------------------------------------------------
+\---
 
-## 5) Age Priors
+## 5\) Age Priors
 
 Empirical priors are constructed from fishery-aged samples.
 
 ### Pooled prior (area × sex)
 
-π_pool(a \| k,s) = N\_{k,s,a} / Σ_a N\_{k,s,a}
+π\_pool(a | k,s) = N\_{k,s,a} / Σ\_a N\_{k,s,a}
 
 ### Global prior (sex)
 
-π_glob(a \| s) = N\_{s,a} / Σ_a N\_{s,a}
+π\_glob(a | s) = N\_{s,a} / Σ\_a N\_{s,a}
 
 ### Cell prior (year × quarter × area × sex)
 
-π_cell(a \| y,q,k,s) = N\_{y,q,k,s,a} / Σ_a N\_{y,q,k,s,a}
+π\_cell(a | y,q,k,s) = N\_{y,q,k,s,a} / Σ\_a N\_{y,q,k,s,a}
 
-If N_cell ≥ min_n\_cell:
+If N\_cell ≥ min\_n\_cell:
 
-π(a \| y,q,k,s) = w \* π_cell(a \| y,q,k,s) + (1 − w) \* π_base(a \|
+π(a | y,q,k,s) = w \* π\_cell(a | y,q,k,s) + (1 − w) \* π\_base(a |
 k,s)
 
-where w = prior_mix.
+where w = prior\_mix.
 
-Otherwise π_base is used alone.
+Otherwise π\_base is used alone.
 
 All priors are normalized.
 
-------------------------------------------------------------------------
+\---
 
-## 6) Likelihood Model
+## 6\) Likelihood Model
 
 Length-at-age is modeled as:
 
-L \| a,y,q,k,s \~ Normal( μ_q(a,s,y,k), σ_q² )
+L | a,y,q,k,s \~ Normal( μ\_q(a,s,y,k), σ\_q² )
 
-σ_q = sqrt( σ_survey² + σ_delta² )
+σ\_q = sqrt( σ\_survey² + σ\_delta² )
 
 Likelihood:
 
-ℒ(a) = φ(L ; μ_q(a,s,y,k), σ_q)
+ℒ(a) = φ(L ; μ\_q(a,s,y,k), σ\_q)
 
-------------------------------------------------------------------------
+\---
 
-## 7) Posterior Distribution
+## 7\) Posterior Distribution
 
 Using Bayes' rule:
 
-p(a \| L,y,q,k,s) ∝ ℒ(a) × π(a \| y,q,k,s)
+p(a | L,y,q,k,s) ∝ ℒ(a) × π(a | y,q,k,s)
 
 Normalized:
 
-p(a \| ...) = ℒ(a) π(a) / Σ_a ℒ(a) π(a)
+p(a | ...) = ℒ(a) π(a) / Σ\_a ℒ(a) π(a)
 
 If numerical failure occurs, a uniform posterior is used.
 
-------------------------------------------------------------------------
+\---
 
-## 8) Outputs
+## 8\) Outputs
 
-### posterior_rows
+### posterior\_rows
 
-Posterior vector for each unique (YEAR, QUARTER, AREA_K, SEX, LENGTH)
+Posterior vector for each unique (YEAR, QUARTER, AREA\_K, SEX, LENGTH)
 
-### row_age
+### row\_age
 
-MAP estimate: Â = argmax_a p(a \| L,...)
+MAP estimate: Â = argmax\_a p(a | L,...)
 
-Sampling: Â \~ Categorical(p(a \| L,...))
+Sampling: Â \~ Categorical(p(a | L,...))
 
 ### agecomp
 
 Expected counts:
 
-E\[N_a\] = n × p(a \| L,...)
+E\[N\_a] = n × p(a | L,...)
 
 Aggregated over lengths:
 
-E\[N_a(y,q,k,s)\] = Σ_L n(L) p(a \| L,...)
+E\[N\_a(y,q,k,s)] = Σ\_L n(L) p(a | L,...)
 
-------------------------------------------------------------------------
+\---
 
-## 9) Interpretation
+## 9\) Interpretation
 
--   The survey backbone anchors the age-length relationship.
--   The delta model adjusts for seasonal growth differences.
--   Empirical priors stabilize predictions in sparse strata.
--   The framework is fully Bayesian at the prediction stage.
+* The survey backbone anchors the age-length relationship.
+* The delta model adjusts for seasonal growth differences.
+* Empirical priors stabilize predictions in sparse strata.
+* The framework is fully Bayesian at the prediction stage.
 
